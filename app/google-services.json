@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "1053111214079",
+    "firebase_url": "https://lista-compra-24a5a-default-rtdb.firebaseio.com",
+    "project_id": "lista-compra-24a5a",
+    "storage_bucket": "lista-compra-24a5a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1053111214079:android:0345ec8694216c3c0951ca",
+        "android_client_info": {
+          "package_name": "com.enriquediaz.listacompra"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1053111214079-tub2khuiltotgl0ap9ss3j6o5vpm4cu5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9Q4o-6H8t0_GIMYwm9CzCQhyheWqtE4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1053111214079-tub2khuiltotgl0ap9ss3j6o5vpm4cu5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
