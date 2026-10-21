@@ -72,4 +72,5 @@ dependencies {
     ksp(libs.hilt.compiler) // <-- Recuerda usar ksp, no kapt
     implementation(libs.hilt.navigation.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation("androidx.compose.material:material-icons-core")
 }
