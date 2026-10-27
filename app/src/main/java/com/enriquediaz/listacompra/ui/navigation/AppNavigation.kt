@@ -1,9 +1,11 @@
 package com.enriquediaz.listacompra.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.enriquediaz.listacompra.ui.auth.LoginScreen
 import com.enriquediaz.listacompra.ui.lists.DashboardScreen
 import com.enriquediaz.listacompra.ui.detail.ListDetailScreen
@@ -23,10 +25,11 @@ fun AppNavigation(){
         }
 
         // Esta ruta recibe un argumento: el ID de la lista
-        composable("list_detail/{listId}"){ backStackEntry ->
-            val listId = backStackEntry.arguments?.getString("listId") ?: ""
-            ListDetailScreen(listId = listId, navController = navController)
-
+        composable(
+            route = "list_detail/{listId}",
+            arguments = listOf(navArgument("listId") { type = NavType.StringType })
+        ) {
+            ListDetailScreen(navController = navController)
         }
     }
 }

@@ -1,9 +1,16 @@
 package com.enriquediaz.listacompra.data.repository
 
+import android.util.Log
+import com.enriquediaz.listacompra.data.model.Category
+import com.enriquediaz.listacompra.data.model.Product
 import com.enriquediaz.listacompra.data.model.ShoppingList
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source // IMPORTANTE: Para ignorar la caché
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,41 +19,119 @@ class ListRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth
 ) {
-    // Obtener listas donde el usuario está en 'members'
     suspend fun getUserLists(): Result<List<ShoppingList>> {
         return try {
             val currentUserId = auth.currentUser?.uid ?: throw Exception("No hay usuario logueado")
-            // Es la consulta a la BD para obtener las listas del usuario
-            val snapshot = firestore.collection("lists")
-                .whereArrayContains("members", currentUserId)
-                .get()
-                .await()
-            // Convierte los documentos de la BD en objetos de la clase ShoppingList
-            val lists = snapshot.toObjects(ShoppingList::class.java)
-
-            // Muestra las listas si ha tenido éxito, sino muestra el error
+            val snapshot =
+                firestore.collection("lists").whereArrayContains("members", currentUserId).get()
+                    .await()
+            val lists = snapshot.documents.map { doc ->
+                val list = doc.toObject(ShoppingList::class.java) ?: ShoppingList()
+                list.copy(id = doc.id)
+            }
             Result.success(lists)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    // Crear lista nueva
     suspend fun createList(name: String): Result<Unit> {
         return try {
-            // Comprueba que haya un usuario logueado para poder crear las listas
             val currentUserId = auth.currentUser?.uid ?: throw Exception("No hay usuario logueado")
-            // Crea una nueva lista con las propiedades de la clase ShoppingList
-            val newList = ShoppingList(
-                name = name,
-                ownerId = currentUserId,
-                members = listOf(currentUserId) // El creador es el primer miembro
-            )
-            // Se guarda en la BD la nueva lista
+            val newList =
+                ShoppingList(name = name, ownerId = currentUserId, members = listOf(currentUserId))
             firestore.collection("lists").add(newList).await()
-
             Result.success(Unit)
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun getCategories(listId: String): Result<List<Category>> {
+        return try {
+            // Forzamos lectura desde el servidor
+            val snapshot = firestore.collection("lists").document(listId).collection("categories")
+                .get(Source.SERVER).await()
+            val categories = snapshot.documents.map { doc ->
+                val category = doc.toObject(Category::class.java) ?: Category()
+                category.copy(id = doc.id)
+            }
+            Result.success(categories)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addCategory(listId: String, categoryName: String): Result<Unit> {
+        return try {
+            val newCategory = Category(name = categoryName)
+            firestore.collection("lists").document(listId).collection("categories").add(newCategory)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // --- LECTURA A PRUEBA DE BALAS ---
+    suspend fun getProducts(listId: String): Result<List<Product>> {
+        return try {
+            // Leemos directamente del servidor para evitar cachés corruptas
+            val snapshot = firestore.collection("lists")
+                .document(listId)
+                .collection("products")
+                .get(Source.SERVER)
+                .await()
+
+            // Mapeo manual (evita bugs de Firestore al leer booleanos)
+            val products = snapshot.documents.map { doc ->
+                Product(
+                    id = doc.id,
+                    name = doc.getString("name") ?: "",
+                    categoryId = doc.getString("categoryId") ?: "",
+                    isCompleted = doc.getBoolean("isCompleted") ?: false,
+                    tags = (doc.get("tags") as? List<String>) ?: emptyList()
+                )
+            }
+            Result.success(products)
+        } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error leyendo: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addProduct(listId: String, productName: String, categoryId: String): Result<Unit> {
+        return try {
+            val newProduct =
+                Product(name = productName, categoryId = categoryId, isCompleted = false)
+            firestore.collection("lists").document(listId).collection("products").add(newProduct)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // --- ESCRITURA A PRUEBA DE BALAS ---
+    suspend fun toggleProductCompleted(
+        listId: String,
+        productId: String,
+        isCompleted: Boolean
+    ): Result<Unit> {
+        return try {
+            val updates = hashMapOf<String, Any>("isCompleted" to isCompleted)
+
+            withContext(NonCancellable) {
+                firestore.collection("lists")
+                    .document(listId)
+                    .collection("products")
+                    .document(productId)
+                    .set(updates, SetOptions.merge())
+                    .await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error guardando: ${e.message}")
             Result.failure(e)
         }
     }
