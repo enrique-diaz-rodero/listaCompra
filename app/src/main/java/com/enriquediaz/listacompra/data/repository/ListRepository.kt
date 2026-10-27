@@ -135,4 +135,56 @@ class ListRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    // Eliminar un producto
+    suspend fun deleteProduct(listId: String, productId: String): Result<Unit> {
+        return try {
+            withContext(NonCancellable) {
+                firestore.collection("lists")
+                    .document(listId)
+                    .collection("products")
+                    .document(productId)
+                    .delete()
+                    .await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error borrando producto: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // Eliminar una lista completa (y sus subcolecciones)
+    suspend fun deleteList(listId: String): Result<Unit> {
+        return try {
+            withContext(NonCancellable) {
+                // Usamos un Batch para hacer todas las operaciones de golpe (es más rápido y seguro)
+                val batch = firestore.batch()
+
+                // 1. Borrar todos los productos
+                val productsSnapshot = firestore.collection("lists").document(listId).collection("products").get().await()
+                productsSnapshot.documents.forEach { doc ->
+                    batch.delete(doc.reference)
+                }
+
+                // 2. Borrar todas las categorías
+                val categoriesSnapshot = firestore.collection("lists").document(listId).collection("categories").get().await()
+                categoriesSnapshot.documents.forEach { doc ->
+                    batch.delete(doc.reference)
+                }
+
+                // 3. Borrar la lista principal
+                val listRef = firestore.collection("lists").document(listId)
+                batch.delete(listRef)
+
+                // Ejecutar todos los borrados
+                batch.commit().await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error borrando la lista: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
 }

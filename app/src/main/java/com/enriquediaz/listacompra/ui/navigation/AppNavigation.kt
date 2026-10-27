@@ -9,22 +9,29 @@ import androidx.navigation.navArgument
 import com.enriquediaz.listacompra.ui.auth.LoginScreen
 import com.enriquediaz.listacompra.ui.lists.DashboardScreen
 import com.enriquediaz.listacompra.ui.detail.ListDetailScreen
+import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun AppNavigation(){
+fun AppNavigation() {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "login"){
+    // 1. Comprobamos si Firebase tiene un usuario guardado en la memoria local
+    val auth = FirebaseAuth.getInstance()
 
-        composable("login"){
+    // 2. Si currentUser NO es nulo, la app arrancará directamente en el Dashboard.
+    // Si es nulo, arrancará en el Login.
+    val startDestination = if (auth.currentUser != null) "dashboard" else "login"
+
+    NavHost(navController = navController, startDestination = startDestination) {
+
+        composable("login") {
             LoginScreen(navController = navController)
         }
 
-        composable("dashboard"){
+        composable("dashboard") {
             DashboardScreen(navController = navController)
         }
 
-        // Esta ruta recibe un argumento: el ID de la lista
         composable(
             route = "list_detail/{listId}",
             arguments = listOf(navArgument("listId") { type = NavType.StringType })
