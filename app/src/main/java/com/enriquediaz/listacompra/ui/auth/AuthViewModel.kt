@@ -22,5 +22,16 @@ class AuthViewModel @Inject constructor(
             }
         }
     }
-    // TODO: // Aquí irá la lógica de Google más adelante
+    fun loginConGoogle(idToken: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            val result = authRepository.signInWithGoogle(idToken)
+            if (result.isSuccess) {
+                onSuccess()
+            } else {
+                // Si falla, extraemos el mensaje de error y lo enviamos a la UI
+                val mensajeError = result.exceptionOrNull()?.message ?: "Error desconocido en Google"
+                onError(mensajeError)
+            }
+        }
+    }
 }

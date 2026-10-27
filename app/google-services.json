@@ -15,6 +15,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "1053111214079-9d3lcptfmio8r5p1klai7sd8rk5r6kqk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.enriquediaz.listacompra",
+            "certificate_hash": "bd4be497026485af880168760b165011ecf92b8c"
+          }
+        },
+        {
+          "client_id": "1053111214079-ppdb2qvvjarpl8g3rmd5d23c6d2ii55b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.enriquediaz.listacompra",
+            "certificate_hash": "7a267f401f54abc6a3e10ea5fc162096a7edc623"
+          }
+        },
+        {
           "client_id": "1053111214079-tub2khuiltotgl0ap9ss3j6o5vpm4cu5.apps.googleusercontent.com",
           "client_type": 3
         }
