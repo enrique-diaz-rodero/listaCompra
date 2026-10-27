@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,21 +22,18 @@ import com.enriquediaz.listacompra.data.model.ShoppingList
 @Composable
 fun DashboardScreen(
     navController: NavController,
-    viewModel: DashboardViewModel = hiltViewModel() // Inyectamos el ViewModel con Hilt
+    viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    // 1. Observamos el estado de las listas desde el ViewModel
     val lists by viewModel.lists.collectAsState()
 
-    // 2. Estados locales para el diálogo de crear lista
     var showAddDialog by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
+    var listToDelete by remember { mutableStateOf<ShoppingList?>(null) }
 
-    // 3. Cargamos las listas la primera vez que se muestra la pantalla
     LaunchedEffect(Unit) {
         viewModel.loadLists()
     }
 
-    // 4. Estructura principal de la pantalla (Scaffold)
     Scaffold(
         topBar = {
             TopAppBar(
@@ -42,23 +41,34 @@ fun DashboardScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.primary
-                )
+                ),
+                actions = {
+                    // NUEVO: Botón de Cerrar Sesión
+                    IconButton(onClick = {
+                        viewModel.logout()
+                        // Navegamos al login y borramos TODO el historial de navegación
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = "Cerrar Sesión",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             )
         },
         floatingActionButton = {
-            // Botón flotante para añadir una nueva lista
             FloatingActionButton(onClick = { showAddDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Añadir Lista")
             }
         }
     ) { paddingValues ->
-        // 5. Contenido principal (la lista)
         if (lists.isEmpty()) {
-            // Estado vacío
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -68,20 +78,19 @@ fun DashboardScreen(
                 )
             }
         } else {
-            // Lista de tarjetas
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(lists) { list ->
                     ListItemCard(
                         list = list,
                         onClick = {
-                            // Navegamos al detalle pasando el ID de la lista en la URL
                             navController.navigate("list_detail/${list.id}")
+                        },
+                        onDeleteClick = {
+                            listToDelete = list
                         }
                     )
                 }
@@ -89,12 +98,12 @@ fun DashboardScreen(
         }
     }
 
-    // 6. El Diálogo para crear una nueva lista
+    // Diálogo para crear nueva lista
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = {
                 showAddDialog = false
-                newListName = "" // Limpiamos el texto al cerrar
+                newListName = ""
             },
             title = { Text("Nueva Lista") },
             text = {
@@ -128,13 +137,37 @@ fun DashboardScreen(
             }
         )
     }
+
+    // Diálogo para confirmar borrado
+    listToDelete?.let { list ->
+        AlertDialog(
+            onDismissRequest = { listToDelete = null },
+            title = { Text("Eliminar Lista") },
+            text = { Text("¿Estás seguro de que quieres borrar '${list.name}' y todos sus productos? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteList(list.id)
+                        listToDelete = null
+                    }
+                ) {
+                    Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { listToDelete = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
 }
 
-// 7. Componente reutilizable para cada elemento de la lista
 @Composable
 fun ListItemCard(
     list: ShoppingList,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -142,20 +175,33 @@ fun ListItemCard(
             .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = list.name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Compartida con: ${list.members.size} persona(s)",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = list.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Compartida con: ${list.members.size} persona(s)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            IconButton(onClick = onDeleteClick) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Eliminar lista",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }

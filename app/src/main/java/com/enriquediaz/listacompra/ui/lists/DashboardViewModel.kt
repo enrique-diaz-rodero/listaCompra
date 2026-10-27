@@ -3,6 +3,7 @@ package com.enriquediaz.listacompra.ui.lists
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.enriquediaz.listacompra.data.model.ShoppingList
+import com.enriquediaz.listacompra.data.repository.AuthRepository
 import com.enriquediaz.listacompra.data.repository.ListRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +13,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val listRepository: ListRepository
+    private val listRepository: ListRepository,
+    private val authRepository: AuthRepository
 ) : ViewModel() {
 
     private val _lists = MutableStateFlow<List<ShoppingList>>(emptyList())
@@ -32,5 +34,15 @@ class DashboardViewModel @Inject constructor(
             listRepository.createList(name)
             loadLists() // Recargar la lista tras crear
         }
+    }
+    fun deleteList(listId: String) {
+        viewModelScope.launch {
+            listRepository.deleteList(listId)
+            loadLists() // Recargamos para que desaparezca de la pantalla
+        }
+    }
+    // NUEVA FUNCIÓN: Cerrar sesión
+    fun logout() {
+        authRepository.signOut()
     }
 }

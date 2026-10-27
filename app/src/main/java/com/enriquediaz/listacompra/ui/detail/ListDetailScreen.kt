@@ -1,5 +1,7 @@
 package com.enriquediaz.listacompra.ui.detail
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -7,16 +9,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete // Icono de papelera
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class
+) // Añadido ExperimentalFoundationApi
 @Composable
 fun ListDetailScreen(
     navController: NavController,
@@ -36,7 +44,7 @@ fun ListDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Productos") },
+                title = { Text("Lista de la compra") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
@@ -62,7 +70,9 @@ fun ListDetailScreen(
     ) { padding ->
         if (products.isEmpty()) {
             Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -73,33 +83,73 @@ fun ListDetailScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(bottom = 80.dp) // Espacio para que el FAB no tape el último producto
             ) {
-                // EL KEY ES FUNDAMENTAL PARA QUE EL CHECKBOX NO SE CONFUNDA
-                items(products, key = { it.id }) { product ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Checkbox(
-                            checked = product.isCompleted,
-                            onCheckedChange = { viewModel.toggleProduct(product) }
-                        )
-                        Text(
-                            text = product.name,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyLarge,
-                            textDecoration = if (product.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                        )
+                // Recorremos las categorías
+                categories.forEach { category ->
+                    // Filtramos los productos que pertenecen a esta categoría
+                    val productsInCategory = products.filter { it.categoryId == category.id }
+
+                    // Solo mostramos la cabecera si hay productos en esa categoría
+                    if (productsInCategory.isNotEmpty()) {
+                        stickyHeader {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = category.name,
+                                    modifier = Modifier.padding(
+                                        horizontal = 16.dp,
+                                        vertical = 8.dp
+                                    ),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+
+                        // Pintamos los productos de esta categoría
+                        items(productsInCategory, key = { it.id }) { product ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = product.isCompleted,
+                                    onCheckedChange = { viewModel.toggleProduct(product) }
+                                )
+                                Text(
+                                    text = product.name,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    textDecoration = if (product.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                    color = if (product.isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
+                                )
+                                // Botón para borrar el producto
+                                IconButton(onClick = { viewModel.deleteProduct(product) }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Eliminar producto",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        }
                     }
-                    HorizontalDivider()
                 }
             }
         }
     }
 
+    // --- DIÁLOGOS (Se quedan exactamente igual) ---
     if (showCategoryDialog) {
         AlertDialog(
             onDismissRequest = { showCategoryDialog = false },
@@ -146,7 +196,8 @@ fun ListDetailScreen(
                             onClick = { expandedDropdown = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            val categoryName = categories.find { it.id == selectedCategoryId }?.name ?: "Elegir Categoría"
+                            val categoryName = categories.find { it.id == selectedCategoryId }?.name
+                                ?: "Elegir Categoría"
                             Text(categoryName)
                         }
                         DropdownMenu(

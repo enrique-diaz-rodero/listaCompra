@@ -73,4 +73,15 @@ class ListDetailViewModel @Inject constructor(
             }
         }
     }
+
+    fun deleteProduct(product: Product) {
+        viewModelScope.launch {
+            val result = listRepository.deleteProduct(listId, product.id)
+            if (result.isSuccess) {
+                loadData() // Recargamos para que desaparezca de la pantalla
+            } else {
+                Log.e("ListDetailVM", "No se pudo borrar el producto")
+            }
+        }
+    }
 }
