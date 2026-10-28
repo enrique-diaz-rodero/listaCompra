@@ -19,6 +19,8 @@ class ListDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
+    private val _shareResult = MutableStateFlow<String?>(null)
+    val shareResult: StateFlow<String?> = _shareResult
     private val listId: String = savedStateHandle.get<String>("listId") ?: ""
 
     private val _categories = MutableStateFlow<List<Category>>(emptyList())
@@ -83,5 +85,21 @@ class ListDetailViewModel @Inject constructor(
                 Log.e("ListDetailVM", "No se pudo borrar el producto")
             }
         }
+    }
+
+    fun shareList(email: String) {
+        viewModelScope.launch {
+            val result = listRepository.shareListWithEmail(listId, email)
+            if (result.isSuccess) {
+                _shareResult.value = "Lista compartida con éxito"
+                loadData()
+            } else {
+                _shareResult.value = "Error al compartir la lista"
+            }
+        }
+    }
+
+    fun clearShareResult() {
+        _shareResult.value = null
     }
 }

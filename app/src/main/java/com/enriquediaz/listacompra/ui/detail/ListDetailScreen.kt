@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
+import androidx.compose.material.icons.filled.PersonAdd // Icono de compartir
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -40,6 +41,9 @@ fun ListDetailScreen(
     var newProductName by remember { mutableStateOf("") }
     var selectedCategoryId by remember { mutableStateOf("") }
     var expandedDropdown by remember { mutableStateOf(false) }
+    var showShareDialog by remember { mutableStateOf(false) }
+    var emailToShareWith by remember { mutableStateOf("") }
+    val shareResult by viewModel.shareResult.collectAsState()
 
     Scaffold(
         topBar = {
@@ -54,6 +58,12 @@ fun ListDetailScreen(
                     IconButton(onClick = { showCategoryDialog = true }) {
                         Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Nueva Categoría")
                     }
+                    IconButton(onClick = {
+                        showShareDialog = true
+                    }) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = "Compartir lista con...")
+                    }
+
                 }
             )
         },
@@ -228,6 +238,47 @@ fun ListDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showProductDialog = false }) { Text("Cancelar") }
+            }
+        )
+    }
+
+    if(showShareDialog) {
+        AlertDialog(
+            onDismissRequest = { showShareDialog = false },
+            title = { Text("Compartir Lista") },
+            text = {
+                Column {
+                    Text("Introduce el correo de la persona con la que quieres compartir la lista:")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = emailToShare,
+                        onValueChange = { emailToShare = it },
+                        label = { Text("Correo electrónico") },
+                        singleLine = true
+                    )
+                    // Mostrar mensaje de éxito o error
+                    shareResult?.let { msg ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = msg,
+                            color = if (msg.contains("Error")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (emailToShare.isNotBlank()) {
+                        viewModel.shareList(emailToShare)
+                    }
+                }) { Text("Compartir") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showShareDialog = false
+                    viewModel.clearShareResult()
+                    emailToShare = ""
+                }) { Text("Cerrar") }
             }
         )
     }
