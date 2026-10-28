@@ -4,6 +4,7 @@ import android.util.Log
 import com.enriquediaz.listacompra.data.model.Category
 import com.enriquediaz.listacompra.data.model.Product
 import com.enriquediaz.listacompra.data.model.ShoppingList
+import com.enriquediaz.listacompra.data.model.User
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -190,19 +191,26 @@ class ListRepository @Inject constructor(
 
     suspend fun shareListWithEmail(listId: String, email: String): Result<Unit> {
         return try {
-            // 1. Buscamos al usuario por email en la colección "users"
+            // 1. Limpiamos el correo: quitamos espacios y lo pasamos a minúsculas
+            val cleanEmail = email.trim().lowercase()
+
+            Log.d("FirestoreDebug", "Buscando el correo exacto: '$cleanEmail'")
+
+            // 2. Buscamos al usuario en Firestore
             val userSnapshot = firestore.collection("users")
-                .whereEqualTo("email", email)
+                .whereEqualTo("email", cleanEmail)
                 .get()
                 .await()
 
             if (userSnapshot.isEmpty) {
-                throw Exception("No existe ningún usuario con ese correo.")
+                Log.e("FirestoreDebug", "No se encontró ningún usuario con el correo: $cleanEmail")
+                throw Exception("No existe ningún usuario con ese correo. Asegúrate de que ha iniciado sesión antes.")
             }
 
             val invitedUserUid = userSnapshot.documents.first().id
+            Log.d("FirestoreDebug", "Usuario encontrado. Añadiendo UID $invitedUserUid a la lista $listId")
 
-            // 2. Añadimos su UID al array "members" de la lista
+            // 3. Añadimos su UID al array "members" de la lista
             firestore.collection("lists")
                 .document(listId)
                 .update("members", FieldValue.arrayUnion(invitedUserUid))
@@ -211,6 +219,44 @@ class ListRepository @Inject constructor(
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("FirestoreDebug", "Error al compartir: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // Obtener los datos de la lista (para saber quién es el dueño y quiénes son los miembros)
+    suspend fun getListById(listId: String): Result<ShoppingList> {
+        return try {
+            val doc = firestore.collection("lists").document(listId).get().await()
+            val list = doc.toObject(ShoppingList::class.java)?.copy(id = doc.id) ?: throw Exception("Lista no encontrada")
+            Result.success(list)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Obtener los datos (nombre/email) de un usuario por su UID
+    suspend fun getUserDetails(uid: String): Result<User> {
+        return try {
+            val doc = firestore.collection("users").document(uid).get().await()
+            val user = doc.toObject(User::class.java) ?: User(uid = uid, email = "Desconocido", name = "Usuario")
+            Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    // Eliminar a un miembro de la lista
+    suspend fun removeMember(listId: String, memberUid: String): Result<Unit> {
+        return try {
+            withContext(NonCancellable) {
+                firestore.collection("lists")
+                    .document(listId)
+                    .update("members", FieldValue.arrayRemove(memberUid))
+                    .await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error al eliminar miembro: ${e.message}")
             Result.failure(e)
         }
     }
