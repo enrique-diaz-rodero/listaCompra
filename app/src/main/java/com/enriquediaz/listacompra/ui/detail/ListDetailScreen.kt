@@ -42,7 +42,7 @@ fun ListDetailScreen(
     var selectedCategoryId by remember { mutableStateOf("") }
     var expandedDropdown by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
-    var emailToShareWith by remember { mutableStateOf("") }
+    var emailToShare by remember { mutableStateOf("") }
     val shareResult by viewModel.shareResult.collectAsState()
 
     Scaffold(
