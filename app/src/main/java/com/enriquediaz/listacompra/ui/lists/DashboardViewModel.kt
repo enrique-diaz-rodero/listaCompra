@@ -8,6 +8,7 @@ import com.enriquediaz.listacompra.data.repository.ListRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -20,11 +21,15 @@ class DashboardViewModel @Inject constructor(
     private val _lists = MutableStateFlow<List<ShoppingList>>(emptyList())
     val lists: StateFlow<List<ShoppingList>> = _lists
 
-    fun loadLists() {
+    init {
+        observeLists() // Se ejecuta al nacer el ViewModel
+    }
+
+    private fun observeLists() {
         viewModelScope.launch {
-            val result = listRepository.getUserLists()
-            if (result.isSuccess) {
-                _lists.value = result.getOrDefault(emptyList())
+            // collectLatest se queda escuchando para siempre los cambios
+            listRepository.getUserListsFlow().collectLatest { listsFromCloud ->
+                _lists.value = listsFromCloud
             }
         }
     }
@@ -32,16 +37,17 @@ class DashboardViewModel @Inject constructor(
     fun createNewList(name: String) {
         viewModelScope.launch {
             listRepository.createList(name)
-            loadLists() // Recargar la lista tras crear
+            // Ya NO llamamos a loadLists(). El flujo de arriba detectará el cambio solo.
         }
     }
+
     fun deleteList(listId: String) {
         viewModelScope.launch {
             listRepository.deleteList(listId)
-            loadLists() // Recargamos para que desaparezca de la pantalla
+            // El flujo también lo quitará de la pantalla automáticamente.
         }
     }
-    // NUEVA FUNCIÓN: Cerrar sesión
+
     fun logout() {
         authRepository.signOut()
     }

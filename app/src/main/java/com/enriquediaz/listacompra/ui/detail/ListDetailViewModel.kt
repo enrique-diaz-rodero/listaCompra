@@ -13,6 +13,7 @@ import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -25,7 +26,6 @@ class ListDetailViewModel @Inject constructor(
     private val listId: String = savedStateHandle.get<String>("listId") ?: ""
     private val currentUserId: String = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
-    // --- ESTADOS DE LA UI ---
     private val _shareResult = MutableStateFlow<String?>(null)
     val shareResult: StateFlow<String?> = _shareResult
 
@@ -35,7 +35,6 @@ class ListDetailViewModel @Inject constructor(
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     val products: StateFlow<List<Product>> = _products
 
-    // NUEVOS ESTADOS: Para gestionar los miembros y los detalles de la lista
     private val _listDetails = MutableStateFlow<ShoppingList?>(null)
     val listDetails: StateFlow<ShoppingList?> = _listDetails
 
@@ -43,97 +42,76 @@ class ListDetailViewModel @Inject constructor(
     val membersDetails: StateFlow<List<User>> = _membersDetails
 
     init {
-        Log.d("ListDetailVM", "ID de la lista: '$listId'")
-        loadData()
+        observeData()
+        loadMembers()
     }
 
-    fun loadData() {
+    private fun observeData() {
         viewModelScope.launch {
-            listRepository.getCategories(listId).onSuccess { _categories.value = it }
-            listRepository.getProducts(listId).onSuccess { _products.value = it }
-            loadMembers() // Cargamos los miembros al iniciar
+            listRepository.getProductsFlow(listId).collectLatest { _products.value = it }
+        }
+        viewModelScope.launch {
+            listRepository.getCategoriesFlow(listId).collectLatest { _categories.value = it }
         }
     }
 
-    // NUEVA FUNCIÓN: Cargar los datos de los miembros
     fun loadMembers() {
         viewModelScope.launch {
             listRepository.getListById(listId).onSuccess { list ->
                 _listDetails.value = list
                 val users = mutableListOf<User>()
-
-                // Buscamos los datos de cada UID en la colección "users"
                 list.members.forEach { uid ->
                     listRepository.getUserDetails(uid).onSuccess { user ->
                         users.add(user)
                     }
                 }
                 _membersDetails.value = users
-            }.onFailure {
-                Log.e("ListDetailVM", "Error cargando miembros: ${it.message}")
             }
         }
     }
 
-    // NUEVA FUNCIÓN: Eliminar a un miembro
     fun removeMember(memberUid: String) {
         viewModelScope.launch {
-            val result = listRepository.removeMember(listId, memberUid)
-            if (result.isSuccess) {
-                loadMembers() // Recargamos la lista de miembros para que desaparezca de la pantalla
-            } else {
-                Log.e("ListDetailVM", "No se pudo eliminar al miembro")
+            listRepository.removeMember(listId, memberUid).onSuccess {
+                loadMembers()
             }
         }
     }
 
-    // NUEVA FUNCIÓN: Obtener tu propio ID
     fun getCurrentUserId(): String = currentUserId
-
-    // --- FUNCIONES EXISTENTES ---
 
     fun addCategory(name: String) {
         viewModelScope.launch {
             listRepository.addCategory(listId, name)
-            loadData()
+            // El flujo de observeData() actualizará la UI automáticamente
         }
     }
 
     fun addProduct(name: String, categoryId: String) {
         viewModelScope.launch {
             listRepository.addProduct(listId, name, categoryId)
-            loadData()
+            // El flujo de observeData() actualizará la UI automáticamente
         }
     }
 
     fun toggleProduct(product: Product) {
         val nuevoEstado = !product.isCompleted
 
-        // 1. Actualizamos la pantalla inmediatamente (Optimistic UI)
+        // Optimistic UI
         _products.value = _products.value.map {
             if (it.id == product.id) it.copy(isCompleted = nuevoEstado) else it
         }
 
-        // 2. Guardamos en Firestore en segundo plano
         viewModelScope.launch {
-            val result = listRepository.toggleProductCompleted(listId, product.id, nuevoEstado)
-            if (result.isFailure) {
-                Log.e("ListDetailVM", "Revirtiendo cambio visual por fallo en BD")
-                _products.value = _products.value.map {
-                    if (it.id == product.id) it.copy(isCompleted = product.isCompleted) else it
-                }
-            }
+            listRepository.toggleProductCompleted(listId, product.id, nuevoEstado)
+            // Si falla, el flujo en tiempo real revertirá la UI a su estado real de la nube
         }
     }
 
     fun deleteProduct(product: Product) {
         viewModelScope.launch {
-            val result = listRepository.deleteProduct(listId, product.id)
-            if (result.isSuccess) {
-                loadData()
-            } else {
-                Log.e("ListDetailVM", "No se pudo borrar el producto")
-            }
+            listRepository.deleteProduct(listId, product.id)
+            // La UI se actualizará sola por el flujo
         }
     }
 
@@ -142,10 +120,9 @@ class ListDetailViewModel @Inject constructor(
             val result = listRepository.shareListWithEmail(listId, email)
             if (result.isSuccess) {
                 _shareResult.value = "Lista compartida con éxito"
-                loadData()
+                loadMembers()
             } else {
-                val errorMsg = result.exceptionOrNull()?.message ?: "Error desconocido al compartir"
-                _shareResult.value = errorMsg
+                _shareResult.value = result.exceptionOrNull()?.message ?: "Error"
             }
         }
     }

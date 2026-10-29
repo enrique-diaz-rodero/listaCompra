@@ -30,11 +30,6 @@ fun DashboardScreen(
     var newListName by remember { mutableStateOf("") }
     var listToDelete by remember { mutableStateOf<ShoppingList?>(null) }
 
-    // Cargamos las listas al entrar a la pantalla
-    LaunchedEffect(Unit) {
-        viewModel.loadLists()
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
