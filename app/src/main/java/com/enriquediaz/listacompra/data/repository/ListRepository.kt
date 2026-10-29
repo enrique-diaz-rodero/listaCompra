@@ -9,8 +9,10 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.firestore.Source // IMPORTANTE: Para ignorar la caché
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -21,243 +23,161 @@ class ListRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth
 ) {
-    suspend fun getUserLists(): Result<List<ShoppingList>> {
-        return try {
-            val currentUserId = auth.currentUser?.uid ?: throw Exception("No hay usuario logueado")
-            val snapshot =
-                firestore.collection("lists").whereArrayContains("members", currentUserId).get()
-                    .await()
-            val lists = snapshot.documents.map { doc ->
-                val list = doc.toObject(ShoppingList::class.java) ?: ShoppingList()
-                list.copy(id = doc.id)
-            }
-            Result.success(lists)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
+    // ==========================================
+    // --- ACCIONES DE ESCRITURA (SUSPEND) ---
+    // ==========================================
 
     suspend fun createList(name: String): Result<Unit> {
         return try {
             val currentUserId = auth.currentUser?.uid ?: throw Exception("No hay usuario logueado")
-            val newList =
-                ShoppingList(name = name, ownerId = currentUserId, members = listOf(currentUserId))
+            val newList = ShoppingList(name = name, ownerId = currentUserId, members = listOf(currentUserId))
             firestore.collection("lists").add(newList).await()
             Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun getCategories(listId: String): Result<List<Category>> {
-        return try {
-            // Forzamos lectura desde el servidor
-            val snapshot = firestore.collection("lists").document(listId).collection("categories")
-                .get(Source.SERVER).await()
-            val categories = snapshot.documents.map { doc ->
-                val category = doc.toObject(Category::class.java) ?: Category()
-                category.copy(id = doc.id)
-            }
-            Result.success(categories)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun addCategory(listId: String, categoryName: String): Result<Unit> {
         return try {
             val newCategory = Category(name = categoryName)
-            firestore.collection("lists").document(listId).collection("categories").add(newCategory)
-                .await()
+            firestore.collection("lists").document(listId).collection("categories").add(newCategory).await()
             Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    // --- LECTURA A PRUEBA DE BALAS ---
-    suspend fun getProducts(listId: String): Result<List<Product>> {
-        return try {
-            // Leemos directamente del servidor para evitar cachés corruptas
-            val snapshot = firestore.collection("lists")
-                .document(listId)
-                .collection("products")
-                .get(Source.SERVER)
-                .await()
-
-            // Mapeo manual (evita bugs de Firestore al leer booleanos)
-            val products = snapshot.documents.map { doc ->
-                Product(
-                    id = doc.id,
-                    name = doc.getString("name") ?: "",
-                    categoryId = doc.getString("categoryId") ?: "",
-                    isCompleted = doc.getBoolean("isCompleted") ?: false,
-                    tags = (doc.get("tags") as? List<String>) ?: emptyList()
-                )
-            }
-            Result.success(products)
-        } catch (e: Exception) {
-            Log.e("FirestoreDebug", "Error leyendo: ${e.message}")
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun addProduct(listId: String, productName: String, categoryId: String): Result<Unit> {
         return try {
-            val newProduct =
-                Product(name = productName, categoryId = categoryId, isCompleted = false)
-            firestore.collection("lists").document(listId).collection("products").add(newProduct)
-                .await()
+            val newProduct = Product(name = productName, categoryId = categoryId, isCompleted = false)
+            firestore.collection("lists").document(listId).collection("products").add(newProduct).await()
             Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
-    // --- ESCRITURA A PRUEBA DE BALAS ---
-    suspend fun toggleProductCompleted(
-        listId: String,
-        productId: String,
-        isCompleted: Boolean
-    ): Result<Unit> {
+    suspend fun toggleProductCompleted(listId: String, productId: String, isCompleted: Boolean): Result<Unit> {
         return try {
             val updates = hashMapOf<String, Any>("isCompleted" to isCompleted)
-
             withContext(NonCancellable) {
-                firestore.collection("lists")
-                    .document(listId)
-                    .collection("products")
-                    .document(productId)
-                    .set(updates, SetOptions.merge())
-                    .await()
+                firestore.collection("lists").document(listId).collection("products").document(productId)
+                    .set(updates, SetOptions.merge()).await()
             }
             Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("FirestoreDebug", "Error guardando: ${e.message}")
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
-    // Eliminar un producto
     suspend fun deleteProduct(listId: String, productId: String): Result<Unit> {
         return try {
             withContext(NonCancellable) {
-                firestore.collection("lists")
-                    .document(listId)
-                    .collection("products")
-                    .document(productId)
-                    .delete()
-                    .await()
+                firestore.collection("lists").document(listId).collection("products").document(productId).delete().await()
             }
             Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("FirestoreDebug", "Error borrando producto: ${e.message}")
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
-    // Eliminar una lista completa (y sus subcolecciones)
     suspend fun deleteList(listId: String): Result<Unit> {
         return try {
             withContext(NonCancellable) {
-                // Usamos un Batch para hacer todas las operaciones de golpe (es más rápido y seguro)
                 val batch = firestore.batch()
-
-                // 1. Borrar todos los productos
                 val productsSnapshot = firestore.collection("lists").document(listId).collection("products").get().await()
-                productsSnapshot.documents.forEach { doc ->
-                    batch.delete(doc.reference)
-                }
-
-                // 2. Borrar todas las categorías
+                productsSnapshot.documents.forEach { batch.delete(it.reference) }
                 val categoriesSnapshot = firestore.collection("lists").document(listId).collection("categories").get().await()
-                categoriesSnapshot.documents.forEach { doc ->
-                    batch.delete(doc.reference)
-                }
-
-                // 3. Borrar la lista principal
-                val listRef = firestore.collection("lists").document(listId)
-                batch.delete(listRef)
-
-                // Ejecutar todos los borrados
+                categoriesSnapshot.documents.forEach { batch.delete(it.reference) }
+                batch.delete(firestore.collection("lists").document(listId))
                 batch.commit().await()
             }
             Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("FirestoreDebug", "Error borrando la lista: ${e.message}")
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun shareListWithEmail(listId: String, email: String): Result<Unit> {
         return try {
-            // 1. Limpiamos el correo: quitamos espacios y lo pasamos a minúsculas
             val cleanEmail = email.trim().lowercase()
-
-            Log.d("FirestoreDebug", "Buscando el correo exacto: '$cleanEmail'")
-
-            // 2. Buscamos al usuario en Firestore
-            val userSnapshot = firestore.collection("users")
-                .whereEqualTo("email", cleanEmail)
-                .get()
-                .await()
-
-            if (userSnapshot.isEmpty) {
-                Log.e("FirestoreDebug", "No se encontró ningún usuario con el correo: $cleanEmail")
-                throw Exception("No existe ningún usuario con ese correo. Asegúrate de que ha iniciado sesión antes.")
-            }
-
+            val userSnapshot = firestore.collection("users").whereEqualTo("email", cleanEmail).get().await()
+            if (userSnapshot.isEmpty) throw Exception("No existe ningún usuario con ese correo.")
             val invitedUserUid = userSnapshot.documents.first().id
-            Log.d("FirestoreDebug", "Usuario encontrado. Añadiendo UID $invitedUserUid a la lista $listId")
-
-            // 3. Añadimos su UID al array "members" de la lista
-            firestore.collection("lists")
-                .document(listId)
-                .update("members", FieldValue.arrayUnion(invitedUserUid))
-                .await()
-
+            firestore.collection("lists").document(listId).update("members", FieldValue.arrayUnion(invitedUserUid)).await()
             Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("FirestoreDebug", "Error al compartir: ${e.message}")
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
-    // Obtener los datos de la lista (para saber quién es el dueño y quiénes son los miembros)
+    suspend fun removeMember(listId: String, memberUid: String): Result<Unit> {
+        return try {
+            withContext(NonCancellable) {
+                firestore.collection("lists").document(listId).update("members", FieldValue.arrayRemove(memberUid)).await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    // ==========================================
+    // --- LECTURAS PUNTUALES (SUSPEND) ---
+    // ==========================================
+
     suspend fun getListById(listId: String): Result<ShoppingList> {
         return try {
             val doc = firestore.collection("lists").document(listId).get().await()
             val list = doc.toObject(ShoppingList::class.java)?.copy(id = doc.id) ?: throw Exception("Lista no encontrada")
             Result.success(list)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
-    // Obtener los datos (nombre/email) de un usuario por su UID
     suspend fun getUserDetails(uid: String): Result<User> {
         return try {
             val doc = firestore.collection("users").document(uid).get().await()
             val user = doc.toObject(User::class.java) ?: User(uid = uid, email = "Desconocido", name = "Usuario")
             Result.success(user)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
-    // Eliminar a un miembro de la lista
-    suspend fun removeMember(listId: String, memberUid: String): Result<Unit> {
-        return try {
-            withContext(NonCancellable) {
-                firestore.collection("lists")
-                    .document(listId)
-                    .update("members", FieldValue.arrayRemove(memberUid))
-                    .await()
+    // ==========================================
+    // --- LECTURAS EN TIEMPO REAL (FLOWS) ---
+    // ==========================================
+
+    fun getUserListsFlow(): Flow<List<ShoppingList>> = callbackFlow {
+        val currentUserId = auth.currentUser?.uid ?: run { close(Exception("No hay usuario")); return@callbackFlow }
+        val listener = firestore.collection("lists")
+            .whereArrayContains("members", currentUserId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                if (snapshot != null) {
+                    val lists = snapshot.documents.map { doc ->
+                        doc.toObject(ShoppingList::class.java)?.copy(id = doc.id) ?: ShoppingList()
+                    }
+                    trySend(lists)
+                }
             }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("FirestoreDebug", "Error al eliminar miembro: ${e.message}")
-            Result.failure(e)
-        }
+        awaitClose { listener.remove() }
+    }
+
+    fun getProductsFlow(listId: String): Flow<List<Product>> = callbackFlow {
+        val listener = firestore.collection("lists").document(listId).collection("products")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                if (snapshot != null) {
+                    val products = snapshot.documents.map { doc ->
+                        Product(
+                            id = doc.id,
+                            name = doc.getString("name") ?: "",
+                            categoryId = doc.getString("categoryId") ?: "",
+                            isCompleted = doc.getBoolean("isCompleted") ?: false,
+                            tags = (doc.get("tags") as? List<String>) ?: emptyList()
+                        )
+                    }
+                    trySend(products)
+                }
+            }
+        awaitClose { listener.remove() }
+    }
+
+    fun getCategoriesFlow(listId: String): Flow<List<Category>> = callbackFlow {
+        val listener = firestore.collection("lists").document(listId).collection("categories")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) { close(error); return@addSnapshotListener }
+                if (snapshot != null) {
+                    val categories = snapshot.documents.map { doc ->
+                        doc.toObject(Category::class.java)?.copy(id = doc.id) ?: Category()
+                    }
+                    trySend(categories)
+                }
+            }
+        awaitClose { listener.remove() }
     }
 }

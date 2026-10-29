@@ -1,7 +1,6 @@
 package com.enriquediaz.listacompra.ui.detail
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +8,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete // Icono de papelera
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Group // <-- NUEVO ICONO DE GRUPO
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,12 +21,8 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
-import androidx.compose.material.icons.filled.PersonAdd // Icono de compartir
 
-@OptIn(
-    ExperimentalMaterial3Api::class,
-    ExperimentalFoundationApi::class
-) // Añadido ExperimentalFoundationApi
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ListDetailScreen(
     navController: NavController,
@@ -34,6 +31,12 @@ fun ListDetailScreen(
     val categories by viewModel.categories.collectAsState()
     val products by viewModel.products.collectAsState()
 
+    // Estados para miembros
+    val members by viewModel.membersDetails.collectAsState()
+    val listDetails by viewModel.listDetails.collectAsState()
+    val currentUserId = viewModel.getCurrentUserId()
+    var showMembersDialog by remember { mutableStateOf(false) }
+
     var showCategoryDialog by remember { mutableStateOf(false) }
     var newCategoryName by remember { mutableStateOf("") }
 
@@ -41,6 +44,7 @@ fun ListDetailScreen(
     var newProductName by remember { mutableStateOf("") }
     var selectedCategoryId by remember { mutableStateOf("") }
     var expandedDropdown by remember { mutableStateOf(false) }
+
     var showShareDialog by remember { mutableStateOf(false) }
     var emailToShare by remember { mutableStateOf("") }
     val shareResult by viewModel.shareResult.collectAsState()
@@ -55,15 +59,18 @@ fun ListDetailScreen(
                     }
                 },
                 actions = {
+                    // 1. BOTÓN PARA GESTIONAR MIEMBROS
+                    IconButton(onClick = { showMembersDialog = true }) {
+                        Icon(Icons.Default.Group, contentDescription = "Miembros de la lista")
+                    }
+                    // 2. BOTÓN PARA CREAR CATEGORÍA
                     IconButton(onClick = { showCategoryDialog = true }) {
                         Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Nueva Categoría")
                     }
-                    IconButton(onClick = {
-                        showShareDialog = true
-                    }) {
-                        Icon(Icons.Default.PersonAdd, contentDescription = "Compartir lista con...")
+                    // 3. BOTÓN PARA COMPARTIR (Añadir nuevo miembro)
+                    IconButton(onClick = { showShareDialog = true }) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = "Compartir")
                     }
-
                 }
             )
         },
@@ -80,9 +87,7 @@ fun ListDetailScreen(
     ) { padding ->
         if (products.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
+                modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -93,17 +98,11 @@ fun ListDetailScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(bottom = 80.dp) // Espacio para que el FAB no tape el último producto
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(bottom = 80.dp)
             ) {
-                // Recorremos las categorías
                 categories.forEach { category ->
-                    // Filtramos los productos que pertenecen a esta categoría
                     val productsInCategory = products.filter { it.categoryId == category.id }
-
-                    // Solo mostramos la cabecera si hay productos en esa categoría
                     if (productsInCategory.isNotEmpty()) {
                         stickyHeader {
                             Surface(
@@ -112,23 +111,16 @@ fun ListDetailScreen(
                             ) {
                                 Text(
                                     text = category.name,
-                                    modifier = Modifier.padding(
-                                        horizontal = 16.dp,
-                                        vertical = 8.dp
-                                    ),
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
                         }
-
-                        // Pintamos los productos de esta categoría
                         items(productsInCategory, key = { it.id }) { product ->
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Checkbox(
@@ -142,7 +134,6 @@ fun ListDetailScreen(
                                     textDecoration = if (product.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
                                     color = if (product.isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
                                 )
-                                // Botón para borrar el producto
                                 IconButton(onClick = { viewModel.deleteProduct(product) }) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
@@ -159,7 +150,48 @@ fun ListDetailScreen(
         }
     }
 
-    // --- DIÁLOGOS (Se quedan exactamente igual) ---
+    // --- DIÁLOGO: GESTIONAR MIEMBROS ---
+    if (showMembersDialog) {
+        AlertDialog(
+            onDismissRequest = { showMembersDialog = false },
+            title = { Text("Miembros de la lista") },
+            text = {
+                Column {
+                    if (members.isEmpty()) {
+                        Text("Cargando miembros...")
+                    } else {
+                        members.forEach { member ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = if (member.uid == currentUserId) "${member.email} (Tú)" else member.email,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                // Solo mostramos la papelera si NO soy yo y NO soy el dueño de la lista
+                                if (member.uid != currentUserId && member.uid != listDetails?.ownerId) {
+                                    IconButton(onClick = { viewModel.removeMember(member.uid) }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Eliminar miembro",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMembersDialog = false }) { Text("Cerrar") }
+            }
+        )
+    }
+
+    // --- DIÁLOGO: NUEVA CATEGORÍA ---
     if (showCategoryDialog) {
         AlertDialog(
             onDismissRequest = { showCategoryDialog = false },
@@ -187,6 +219,7 @@ fun ListDetailScreen(
         )
     }
 
+    // --- DIÁLOGO: NUEVO PRODUCTO ---
     if (showProductDialog) {
         AlertDialog(
             onDismissRequest = { showProductDialog = false },
@@ -200,14 +233,12 @@ fun ListDetailScreen(
                         singleLine = true
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-
                     Box {
                         OutlinedButton(
                             onClick = { expandedDropdown = true },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            val categoryName = categories.find { it.id == selectedCategoryId }?.name
-                                ?: "Elegir Categoría"
+                            val categoryName = categories.find { it.id == selectedCategoryId }?.name ?: "Elegir Categoría"
                             Text(categoryName)
                         }
                         DropdownMenu(
@@ -242,6 +273,7 @@ fun ListDetailScreen(
         )
     }
 
+    // --- DIÁLOGO: COMPARTIR LISTA ---
     if(showShareDialog) {
         AlertDialog(
             onDismissRequest = { showShareDialog = false },
@@ -256,12 +288,11 @@ fun ListDetailScreen(
                         label = { Text("Correo electrónico") },
                         singleLine = true
                     )
-                    // Mostrar mensaje de éxito o error
                     shareResult?.let { msg ->
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = msg,
-                            color = if (msg.contains("Error")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            color = if (msg.contains("Error") || msg.contains("No existe")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                         )
                     }
                 }
