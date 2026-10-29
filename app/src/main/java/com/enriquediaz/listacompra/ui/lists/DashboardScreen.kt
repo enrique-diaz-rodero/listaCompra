@@ -30,6 +30,7 @@ fun DashboardScreen(
     var newListName by remember { mutableStateOf("") }
     var listToDelete by remember { mutableStateOf<ShoppingList?>(null) }
 
+    // Cargamos las listas al entrar a la pantalla
     LaunchedEffect(Unit) {
         viewModel.loadLists()
     }
@@ -43,10 +44,10 @@ fun DashboardScreen(
                     titleContentColor = MaterialTheme.colorScheme.primary
                 ),
                 actions = {
-                    // NUEVO: Botón de Cerrar Sesión
+                    // Botón de Cerrar Sesión
                     IconButton(onClick = {
                         viewModel.logout()
-                        // Navegamos al login y borramos TODO el historial de navegación
+                        // Navegamos al login y borramos el historial
                         navController.navigate("login") {
                             popUpTo(0) { inclusive = true }
                         }
@@ -67,8 +68,11 @@ fun DashboardScreen(
         }
     ) { paddingValues ->
         if (lists.isEmpty()) {
+            // Estado vacío
             Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -78,8 +82,11 @@ fun DashboardScreen(
                 )
             }
         } else {
+            // Listado de listas
             LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -138,7 +145,7 @@ fun DashboardScreen(
         )
     }
 
-    // Diálogo para confirmar borrado
+    // Diálogo para confirmar borrado de lista
     listToDelete?.let { list ->
         AlertDialog(
             onDismissRequest = { listToDelete = null },
@@ -163,6 +170,7 @@ fun DashboardScreen(
     }
 }
 
+// Componente visual para cada tarjeta de lista
 @Composable
 fun ListItemCard(
     list: ShoppingList,
@@ -181,6 +189,7 @@ fun ListItemCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Columna para los textos (el weight hace que ocupe el espacio sobrante)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = list.name,
@@ -189,12 +198,14 @@ fun ListItemCard(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Compartida con: ${list.members.size} persona(s)",
+                    // Interpolación correcta para contar a los demás (sin contarte a ti)
+                    text = "Compartida con: ${(list.members.size - 1).coerceAtLeast(0)} persona(s)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
+            // Botón de borrar
             IconButton(onClick = onDeleteClick) {
                 Icon(
                     imageVector = Icons.Default.Delete,
