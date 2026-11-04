@@ -1,6 +1,8 @@
 package com.enriquediaz.listacompra.ui.detail
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Group // <-- NUEVO ICONO DE GRUPO
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,6 +23,10 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import com.enriquediaz.listacompra.data.remote.OffProduct
+import com.enriquediaz.listacompra.utils.AutoCategorizer
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -221,18 +227,86 @@ fun ListDetailScreen(
 
     // --- DIÁLOGO: NUEVO PRODUCTO ---
     if (showProductDialog) {
+        val searchResults by viewModel.searchResults.collectAsState()
+
+        // DEBOUNCE: Esperar a que deje de escribir
+        LaunchedEffect(newProductName) {
+            if (newProductName.length > 2) {
+                delay(500)
+                viewModel.searchApi(newProductName)
+            } else {
+                viewModel.clearSearchResults()
+            }
+        }
+
         AlertDialog(
-            onDismissRequest = { showProductDialog = false },
+            onDismissRequest = {
+                showProductDialog = false
+                viewModel.clearSearchResults()
+            },
             title = { Text("Nuevo Producto") },
             text = {
-                Column {
+                Column(modifier = Modifier.heightIn(max = 450.dp)) {
                     OutlinedTextField(
                         value = newProductName,
-                        onValueChange = { newProductName = it },
+                        onValueChange = { nuevoTexto ->
+                            newProductName = nuevoTexto
+
+                            // AUTO-CLASIFICACIÓN LOCAL
+                            val categoriaSugerida = AutoCategorizer.sugerirCategoria(nuevoTexto)
+                            val categoriaReal = categories.find { it.name == categoriaSugerida }
+                            if (categoriaReal != null) {
+                                selectedCategoryId = categoriaReal.id
+                            }
+                        },
                         label = { Text("Nombre del producto") },
-                        singleLine = true
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // LISTA DE SUGERENCIAS CON IMÁGENES
+                    if (searchResults.isNotEmpty()) {
+                        Text("Sugerencias:", style = MaterialTheme.typography.bodySmall)
+                        LazyColumn {
+                            items(searchResults) { producto ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            newProductName = producto.name ?: ""
+                                            viewModel.clearSearchResults()
+
+                                            // Re-evaluamos la categoría con el nombre seleccionado
+                                            val catSug = AutoCategorizer.sugerirCategoria(newProductName)
+                                            val catReal = categories.find { it.name == catSug }
+                                            if (catReal != null) selectedCategoryId = catReal.id
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (producto.imageUrl != null) {
+                                        AsyncImage(
+                                            model = producto.imageUrl,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(40.dp)
+                                        )
+                                    } else {
+                                        Box(modifier = Modifier.size(40.dp).background(Color.LightGray))
+                                    }
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = producto.name ?: "Sin nombre", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
+
+                    // DESPLEGABLE DE CATEGORÍAS
                     Box {
                         OutlinedButton(
                             onClick = { expandedDropdown = true },
@@ -264,11 +338,15 @@ fun ListDetailScreen(
                         viewModel.addProduct(newProductName, selectedCategoryId)
                         newProductName = ""
                         showProductDialog = false
+                        viewModel.clearSearchResults()
                     }
                 }) { Text("Añadir") }
             },
             dismissButton = {
-                TextButton(onClick = { showProductDialog = false }) { Text("Cancelar") }
+                TextButton(onClick = {
+                    showProductDialog = false
+                    viewModel.clearSearchResults()
+                }) { Text("Cancelar") }
             }
         )
     }
