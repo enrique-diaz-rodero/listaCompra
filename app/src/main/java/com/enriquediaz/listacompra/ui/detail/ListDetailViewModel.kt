@@ -10,6 +10,7 @@ import com.enriquediaz.listacompra.data.model.ShoppingList
 import com.enriquediaz.listacompra.data.model.User
 import com.enriquediaz.listacompra.data.remote.OffProduct
 import com.enriquediaz.listacompra.data.repository.ListRepository
+import com.enriquediaz.listacompra.data.repository.PriceRepository
 import com.enriquediaz.listacompra.data.repository.ProductSearchRepository
 import com.enriquediaz.listacompra.data.repository.UserPreferencesRepository
 import com.google.firebase.auth.FirebaseAuth
@@ -25,8 +26,9 @@ import javax.inject.Inject
 @HiltViewModel
 class ListDetailViewModel @Inject constructor(
     private val listRepository: ListRepository,
-    private val productSearchRepository: ProductSearchRepository, // <-- NUEVO
-    private val preferencesRepository: UserPreferencesRepository, // <-- NUEVO
+    private val productSearchRepository: ProductSearchRepository,
+    private val priceRepository: PriceRepository,               // <-- NUEVO
+    private val preferencesRepository: UserPreferencesRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -48,10 +50,14 @@ class ListDetailViewModel @Inject constructor(
     private val _membersDetails = MutableStateFlow<List<User>>(emptyList())
     val membersDetails: StateFlow<List<User>> = _membersDetails
 
-    // --- NUEVOS ESTADOS PARA EL BUSCADOR DE LA API ---
+    // --- ESTADOS PARA EL BUSCADOR DE LA API ---
     private val _searchResults = MutableStateFlow<List<OffProduct>>(emptyList())
     val searchResults: StateFlow<List<OffProduct>> = _searchResults
-    private var searchJob: Job? = null // Para cancelar búsquedas anteriores si el usuario escribe rápido
+    private var searchJob: Job? = null
+
+    // --- NUEVO: ESTADO PARA EL PRECIO OBTENIDO ---
+    private val _currentPrice = MutableStateFlow<Double?>(null)
+    val currentPrice: StateFlow<Double?> = _currentPrice
 
     init {
         observeData()
@@ -67,14 +73,12 @@ class ListDetailViewModel @Inject constructor(
         }
     }
 
-    // --- NUEVA FUNCIÓN: Búsqueda en Open Food Facts ---
+    // --- BÚSQUEDA EN OPEN FOOD FACTS ---
     fun searchApi(query: String) {
-        // Cancelamos la búsqueda anterior si el usuario sigue escribiendo
         searchJob?.cancel()
 
         searchJob = viewModelScope.launch {
             if (query.length > 2) {
-                // Obtenemos el supermercado preferido del usuario
                 val prefs = preferencesRepository.userPreferencesFlow.first()
                 val supermarket = prefs.supermarket
 
@@ -93,6 +97,27 @@ class ListDetailViewModel @Inject constructor(
     fun clearSearchResults() {
         _searchResults.value = emptyList()
         searchJob?.cancel()
+    }
+
+    // --- NUEVO: OBTENER PRECIO POR EAN DESDE OPEN PRICES ---
+    fun fetchPrice(ean: String?) {
+        if (ean.isNullOrBlank()) {
+            _currentPrice.value = null
+            return
+        }
+        viewModelScope.launch {
+            val prefs = preferencesRepository.userPreferencesFlow.first()
+            if (prefs.showPrices) {
+                val result = priceRepository.getPriceForProduct(ean, prefs.supermarket)
+                _currentPrice.value = result.getOrNull()
+            } else {
+                _currentPrice.value = null
+            }
+        }
+    }
+
+    fun clearPrice() {
+        _currentPrice.value = null
     }
 
     // --- GESTIÓN DE MIEMBROS ---
@@ -128,9 +153,16 @@ class ListDetailViewModel @Inject constructor(
         }
     }
 
-    fun addProduct(name: String, categoryId: String) {
+    // --- ACTUALIZADO: ahora acepta ean y price opcionales ---
+    fun addProduct(
+        name: String,
+        categoryId: String,
+        ean: String? = null,
+        price: Double? = null
+    ) {
         viewModelScope.launch {
-            listRepository.addProduct(listId, name, categoryId)
+            listRepository.addProduct(listId, name, categoryId, ean, price)
+            _currentPrice.value = null // Limpiamos el precio al añadir
         }
     }
 

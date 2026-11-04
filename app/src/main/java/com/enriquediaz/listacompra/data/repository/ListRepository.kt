@@ -61,12 +61,21 @@ class ListRepository @Inject constructor(
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun addProduct(listId: String, productName: String, categoryId: String): Result<Unit> {
+    // En ListRepository.kt, reemplaza tu función addProduct por esta:
+    suspend fun addProduct(listId: String, productName: String, categoryId: String, ean: String? = null, price: Double? = null): Result<Unit> {
         return try {
-            val newProduct = Product(name = productName, categoryId = categoryId, isCompleted = false)
+            val newProduct = Product(
+                name = productName,
+                categoryId = categoryId,
+                isCompleted = false,
+                ean = ean,
+                price = price
+            )
             firestore.collection("lists").document(listId).collection("products").add(newProduct).await()
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun toggleProductCompleted(listId: String, productId: String, isCompleted: Boolean): Result<Unit> {
