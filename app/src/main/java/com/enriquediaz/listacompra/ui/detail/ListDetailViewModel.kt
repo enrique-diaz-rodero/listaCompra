@@ -8,18 +8,25 @@ import com.enriquediaz.listacompra.data.model.Category
 import com.enriquediaz.listacompra.data.model.Product
 import com.enriquediaz.listacompra.data.model.ShoppingList
 import com.enriquediaz.listacompra.data.model.User
+import com.enriquediaz.listacompra.data.remote.OffProduct
 import com.enriquediaz.listacompra.data.repository.ListRepository
+import com.enriquediaz.listacompra.data.repository.ProductSearchRepository
+import com.enriquediaz.listacompra.data.repository.UserPreferencesRepository
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class ListDetailViewModel @Inject constructor(
     private val listRepository: ListRepository,
+    private val productSearchRepository: ProductSearchRepository, // <-- NUEVO
+    private val preferencesRepository: UserPreferencesRepository, // <-- NUEVO
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -41,6 +48,11 @@ class ListDetailViewModel @Inject constructor(
     private val _membersDetails = MutableStateFlow<List<User>>(emptyList())
     val membersDetails: StateFlow<List<User>> = _membersDetails
 
+    // --- NUEVOS ESTADOS PARA EL BUSCADOR DE LA API ---
+    private val _searchResults = MutableStateFlow<List<OffProduct>>(emptyList())
+    val searchResults: StateFlow<List<OffProduct>> = _searchResults
+    private var searchJob: Job? = null // Para cancelar búsquedas anteriores si el usuario escribe rápido
+
     init {
         observeData()
         loadMembers()
@@ -55,6 +67,35 @@ class ListDetailViewModel @Inject constructor(
         }
     }
 
+    // --- NUEVA FUNCIÓN: Búsqueda en Open Food Facts ---
+    fun searchApi(query: String) {
+        // Cancelamos la búsqueda anterior si el usuario sigue escribiendo
+        searchJob?.cancel()
+
+        searchJob = viewModelScope.launch {
+            if (query.length > 2) {
+                // Obtenemos el supermercado preferido del usuario
+                val prefs = preferencesRepository.userPreferencesFlow.first()
+                val supermarket = prefs.supermarket
+
+                val result = productSearchRepository.searchProducts(query, supermarket)
+                if (result.isSuccess) {
+                    _searchResults.value = result.getOrDefault(emptyList())
+                } else {
+                    _searchResults.value = emptyList()
+                }
+            } else {
+                _searchResults.value = emptyList()
+            }
+        }
+    }
+
+    fun clearSearchResults() {
+        _searchResults.value = emptyList()
+        searchJob?.cancel()
+    }
+
+    // --- GESTIÓN DE MIEMBROS ---
     fun loadMembers() {
         viewModelScope.launch {
             listRepository.getListById(listId).onSuccess { list ->
@@ -80,17 +121,16 @@ class ListDetailViewModel @Inject constructor(
 
     fun getCurrentUserId(): String = currentUserId
 
+    // --- GESTIÓN DE CATEGORÍAS Y PRODUCTOS ---
     fun addCategory(name: String) {
         viewModelScope.launch {
             listRepository.addCategory(listId, name)
-            // El flujo de observeData() actualizará la UI automáticamente
         }
     }
 
     fun addProduct(name: String, categoryId: String) {
         viewModelScope.launch {
             listRepository.addProduct(listId, name, categoryId)
-            // El flujo de observeData() actualizará la UI automáticamente
         }
     }
 
@@ -104,17 +144,16 @@ class ListDetailViewModel @Inject constructor(
 
         viewModelScope.launch {
             listRepository.toggleProductCompleted(listId, product.id, nuevoEstado)
-            // Si falla, el flujo en tiempo real revertirá la UI a su estado real de la nube
         }
     }
 
     fun deleteProduct(product: Product) {
         viewModelScope.launch {
             listRepository.deleteProduct(listId, product.id)
-            // La UI se actualizará sola por el flujo
         }
     }
 
+    // --- COMPARTIR LISTA ---
     fun shareList(email: String) {
         viewModelScope.launch {
             val result = listRepository.shareListWithEmail(listId, email)
