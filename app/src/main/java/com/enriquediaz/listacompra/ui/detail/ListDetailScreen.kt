@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.enriquediaz.listacompra.data.remote.OffProduct
 import com.enriquediaz.listacompra.utils.AutoCategorizer
 import kotlinx.coroutines.delay
 
@@ -51,6 +50,9 @@ fun ListDetailScreen(
     var selectedCategoryId by remember { mutableStateOf("") }
     var expandedDropdown by remember { mutableStateOf(false) }
 
+    // NUEVO: Estado para guardar el EAN seleccionado
+    var selectedEan by remember { mutableStateOf<String?>(null) }
+
     var showShareDialog by remember { mutableStateOf(false) }
     var emailToShare by remember { mutableStateOf("") }
     val shareResult by viewModel.shareResult.collectAsState()
@@ -65,15 +67,12 @@ fun ListDetailScreen(
                     }
                 },
                 actions = {
-                    // 1. BOTÓN PARA GESTIONAR MIEMBROS
                     IconButton(onClick = { showMembersDialog = true }) {
                         Icon(Icons.Default.Group, contentDescription = "Miembros de la lista")
                     }
-                    // 2. BOTÓN PARA CREAR CATEGORÍA
                     IconButton(onClick = { showCategoryDialog = true }) {
                         Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Nueva Categoría")
                     }
-                    // 3. BOTÓN PARA COMPARTIR (Añadir nuevo miembro)
                     IconButton(onClick = { showShareDialog = true }) {
                         Icon(Icons.Default.PersonAdd, contentDescription = "Compartir")
                     }
@@ -85,6 +84,7 @@ fun ListDetailScreen(
                 FloatingActionButton(onClick = {
                     showProductDialog = true
                     selectedCategoryId = categories.first().id
+                    selectedEan = null // Limpiamos el EAN al abrir
                 }) {
                     Icon(Icons.Default.Add, contentDescription = "Añadir Producto")
                 }
@@ -133,13 +133,25 @@ fun ListDetailScreen(
                                     checked = product.isCompleted,
                                     onCheckedChange = { viewModel.toggleProduct(product) }
                                 )
-                                Text(
-                                    text = product.name,
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    textDecoration = if (product.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-                                    color = if (product.isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
-                                )
+
+                                // NUEVO: Columna para el nombre y el precio
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = product.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        textDecoration = if (product.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                        color = if (product.isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    // Mostramos el precio si existe
+                                    product.price?.let { price ->
+                                        Text(
+                                            text = "${String.format("%.2f", price)} €",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+
                                 IconButton(onClick = { viewModel.deleteProduct(product) }) {
                                     Icon(
                                         imageVector = Icons.Default.Delete,
@@ -176,7 +188,6 @@ fun ListDetailScreen(
                                     text = if (member.uid == currentUserId) "${member.email} (Tú)" else member.email,
                                     modifier = Modifier.weight(1f)
                                 )
-                                // Solo mostramos la papelera si NO soy yo y NO soy el dueño de la lista
                                 if (member.uid != currentUserId && member.uid != listDetails?.ownerId) {
                                     IconButton(onClick = { viewModel.removeMember(member.uid) }) {
                                         Icon(
@@ -225,16 +236,20 @@ fun ListDetailScreen(
         )
     }
 
-    // --- DIÁLOGO: NUEVO PRODUCTO ---
+    // --- DIÁLOGO: NUEVO PRODUCTO (CON BUSCADOR Y PRECIOS) ---
     if (showProductDialog) {
         val searchResults by viewModel.searchResults.collectAsState()
+        val currentPrice by viewModel.currentPrice.collectAsState()
+        // Leemos las preferencias para saber si mostrar imágenes
+        val prefs by viewModel.preferencesRepository.userPreferencesFlow.collectAsState(initial = null)
 
         // DEBOUNCE: Esperar a que deje de escribir
         LaunchedEffect(newProductName) {
-            if (newProductName.length > 2) {
+            if (newProductName.length > 2 && selectedEan == null) {
+                // Solo busca en la API si no hemos seleccionado ya un producto de la lista
                 delay(500)
                 viewModel.searchApi(newProductName)
-            } else {
+            } else if (newProductName.length <= 2) {
                 viewModel.clearSearchResults()
             }
         }
@@ -243,6 +258,7 @@ fun ListDetailScreen(
             onDismissRequest = {
                 showProductDialog = false
                 viewModel.clearSearchResults()
+                viewModel.clearPrice()
             },
             title = { Text("Nuevo Producto") },
             text = {
@@ -251,6 +267,8 @@ fun ListDetailScreen(
                         value = newProductName,
                         onValueChange = { nuevoTexto ->
                             newProductName = nuevoTexto
+                            selectedEan = null // Si escribe, pierde la selección previa
+                            viewModel.clearPrice() // Limpiamos el precio anterior
 
                             // AUTO-CLASIFICACIÓN LOCAL
                             val categoriaSugerida = AutoCategorizer.sugerirCategoria(nuevoTexto)
@@ -276,32 +294,49 @@ fun ListDetailScreen(
                                         .fillMaxWidth()
                                         .clickable {
                                             newProductName = producto.name ?: ""
+                                            selectedEan = producto.code // Guardamos el EAN
                                             viewModel.clearSearchResults()
 
                                             // Re-evaluamos la categoría con el nombre seleccionado
                                             val catSug = AutoCategorizer.sugerirCategoria(newProductName)
                                             val catReal = categories.find { it.name == catSug }
                                             if (catReal != null) selectedCategoryId = catReal.id
+
+                                            // NUEVO: Buscar el precio
+                                            viewModel.fetchPrice(producto.code)
                                         }
                                         .padding(vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    if (producto.imageUrl != null) {
+                                    // Solo mostramos la imagen si el usuario lo tiene activado en preferencias
+                                    if (prefs?.showImages == true && producto.imageUrl != null) {
                                         AsyncImage(
                                             model = producto.imageUrl,
                                             contentDescription = null,
                                             modifier = Modifier.size(40.dp)
                                         )
+                                        Spacer(modifier = Modifier.width(8.dp))
                                     } else {
                                         Box(modifier = Modifier.size(40.dp).background(Color.LightGray))
+                                        Spacer(modifier = Modifier.width(8.dp))
                                     }
 
-                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(text = producto.name ?: "Sin nombre", style = MaterialTheme.typography.bodyMedium)
                                 }
                                 HorizontalDivider()
                             }
                         }
+                    }
+
+                    // NUEVO: Mostrar el precio si se ha encontrado
+                    currentPrice?.let { precio ->
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Precio estimado: ${String.format("%.2f", precio)} €",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -335,10 +370,13 @@ fun ListDetailScreen(
             confirmButton = {
                 TextButton(onClick = {
                     if (newProductName.isNotBlank() && selectedCategoryId.isNotBlank()) {
-                        viewModel.addProduct(newProductName, selectedCategoryId)
+                        // NUEVO: Pasamos el EAN y el precio al ViewModel
+                        viewModel.addProduct(newProductName, selectedCategoryId, selectedEan, currentPrice)
                         newProductName = ""
+                        selectedEan = null
                         showProductDialog = false
                         viewModel.clearSearchResults()
+                        viewModel.clearPrice()
                     }
                 }) { Text("Añadir") }
             },
@@ -346,6 +384,7 @@ fun ListDetailScreen(
                 TextButton(onClick = {
                     showProductDialog = false
                     viewModel.clearSearchResults()
+                    viewModel.clearPrice()
                 }) { Text("Cancelar") }
             }
         )
