@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.enriquediaz.listacompra.data.model.ShoppingList
 import com.enriquediaz.listacompra.data.repository.AuthRepository
 import com.enriquediaz.listacompra.data.repository.ListRepository
+import com.enriquediaz.listacompra.data.repository.UserPreferencesRepository // <-- NUEVO
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,11 +16,15 @@ import javax.inject.Inject
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val listRepository: ListRepository,
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val preferencesRepository: UserPreferencesRepository // <-- NUEVO
 ) : ViewModel() {
 
     private val _lists = MutableStateFlow<List<ShoppingList>>(emptyList())
     val lists: StateFlow<List<ShoppingList>> = _lists
+
+    // NUEVO: Exponemos las preferencias del usuario (para saber si ha completado el onboarding)
+    val userPreferences = preferencesRepository.userPreferencesFlow
 
     init {
         observeLists() // Se ejecuta al nacer el ViewModel
@@ -50,5 +55,12 @@ class DashboardViewModel @Inject constructor(
 
     fun logout() {
         authRepository.signOut()
+    }
+
+    // Guarda las respuestas del cuestionario en DataStore
+    fun savePreferences(supermarket: String, showImages: Boolean, showPrices: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.savePreferences(supermarket, showImages, showPrices)
+        }
     }
 }
