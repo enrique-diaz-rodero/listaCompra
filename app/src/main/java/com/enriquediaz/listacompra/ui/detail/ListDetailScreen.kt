@@ -241,7 +241,7 @@ fun ListDetailScreen(
         val searchResults by viewModel.searchResults.collectAsState()
         val currentPrice by viewModel.currentPrice.collectAsState()
         // Leemos las preferencias para saber si mostrar imágenes
-        val prefs by viewModel.preferencesRepository.userPreferencesFlow.collectAsState(initial = null)
+        val prefs by viewModel.userPreferences.collectAsState(initial = null)
 
         // DEBOUNCE: Esperar a que deje de escribir
         LaunchedEffect(newProductName) {
