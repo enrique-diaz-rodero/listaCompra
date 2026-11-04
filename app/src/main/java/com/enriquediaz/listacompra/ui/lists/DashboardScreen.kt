@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings // <-- NUEVO IMPORT
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +28,13 @@ fun DashboardScreen(
     val lists by viewModel.lists.collectAsState()
     val prefs by viewModel.userPreferences.collectAsState(initial = null)
 
+    // NUEVO: Estado para controlar el diálogo de ajustes
+    var showSettingsDialog by remember { mutableStateOf(false) }
+
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newListName by remember { mutableStateOf("") }
+    var listToDelete by remember { mutableStateOf<ShoppingList?>(null) }
+
     // Mostrar el cuestionario si no se ha completado
     if (prefs != null && !prefs!!.hasCompletedOnboarding) {
         OnboardingDialog(
@@ -35,10 +43,6 @@ fun DashboardScreen(
             }
         )
     }
-
-    var showAddDialog by remember { mutableStateOf(false) }
-    var newListName by remember { mutableStateOf("") }
-    var listToDelete by remember { mutableStateOf<ShoppingList?>(null) }
 
     Scaffold(
         topBar = {
@@ -49,10 +53,17 @@ fun DashboardScreen(
                     titleContentColor = MaterialTheme.colorScheme.primary
                 ),
                 actions = {
+                    // NUEVO: Botón de Ajustes
+                    IconButton(onClick = { showSettingsDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Ajustes",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     // Botón de Cerrar Sesión
                     IconButton(onClick = {
                         viewModel.logout()
-                        // Navegamos al login y borramos el historial
                         navController.navigate("login") {
                             popUpTo(0) { inclusive = true }
                         }
@@ -170,6 +181,17 @@ fun DashboardScreen(
                 TextButton(onClick = { listToDelete = null }) {
                     Text("Cancelar")
                 }
+            }
+        )
+    }
+
+    // NUEVO: Diálogo de Ajustes Globales
+    if (showSettingsDialog && prefs != null) {
+        SettingsDialog(
+            currentPrefs = prefs!!,
+            onDismiss = { showSettingsDialog = false },
+            onSave = { supermarket, images, prices ->
+                viewModel.savePreferences(supermarket, images, prices)
             }
         )
     }
