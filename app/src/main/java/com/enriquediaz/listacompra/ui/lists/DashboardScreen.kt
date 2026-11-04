@@ -25,6 +25,16 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val lists by viewModel.lists.collectAsState()
+    val prefs by viewModel.userPreferences.collectAsState(initial = null)
+
+    // Mostrar el cuestionario si no se ha completado
+    if (prefs != null && !prefs!!.hasCompletedOnboarding) {
+        OnboardingDialog(
+            onSave = { supermarket, images, prices ->
+                viewModel.savePreferences(supermarket, images, prices)
+            }
+        )
+    }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
