@@ -30,10 +30,27 @@ class ListRepository @Inject constructor(
     suspend fun createList(name: String): Result<Unit> {
         return try {
             val currentUserId = auth.currentUser?.uid ?: throw Exception("No hay usuario logueado")
-            val newList = ShoppingList(name = name, ownerId = currentUserId, members = listOf(currentUserId))
-            firestore.collection("lists").add(newList).await()
+            val newList = ShoppingList(
+                name = name,
+                ownerId = currentUserId,
+                members = listOf(currentUserId)
+            )
+
+            // 1. Creamos la lista y obtenemos su referencia
+            val listRef = firestore.collection("lists").add(newList).await()
+
+            // 2. CREAMOS LA CATEGORÍA POR DEFECTO AUTOMÁTICAMENTE
+            val defaultCategory = Category(name = com.enriquediaz.listacompra.utils.AutoCategorizer.DEFAULT_CATEGORY_NAME)
+            firestore.collection("lists")
+                .document(listRef.id)
+                .collection("categories")
+                .add(defaultCategory)
+                .await()
+
             Result.success(Unit)
-        } catch (e: Exception) { Result.failure(e) }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     suspend fun addCategory(listId: String, categoryName: String): Result<Unit> {
