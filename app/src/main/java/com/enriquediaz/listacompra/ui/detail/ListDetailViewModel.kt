@@ -35,6 +35,8 @@ class ListDetailViewModel @Inject constructor(
     private val listId: String = savedStateHandle.get<String>("listId") ?: ""
     private val currentUserId: String = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
+    val userPreferences = preferencesRepository.userPreferencesFlow
+
     private val _shareResult = MutableStateFlow<String?>(null)
     val shareResult: StateFlow<String?> = _shareResult
 
