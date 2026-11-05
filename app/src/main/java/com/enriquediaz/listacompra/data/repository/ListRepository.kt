@@ -44,6 +44,21 @@ class ListRepository @Inject constructor(
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    // NUEVO: Borrar categoría
+    suspend fun deleteCategory(listId: String, categoryId: String): Result<Unit> {
+        return try {
+            withContext(NonCancellable) {
+                firestore.collection("lists").document(listId)
+                    .collection("categories").document(categoryId)
+                    .delete().await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error borrando categoría: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     suspend fun addProduct(
         listId: String, productName: String, categoryId: String,
         ean: String? = null, price: Double? = null, imageUrl: String? = null
@@ -58,7 +73,6 @@ class ListRepository @Inject constructor(
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    // ESTA FUNCIÓN ES NUEVA Y VITAL PARA EL BOTÓN DE EDITAR (EL LÁPIZ)
     suspend fun updateProduct(listId: String, productId: String, newName: String, newCategoryId: String): Result<Unit> {
         return try {
             val updates = mapOf("name" to newName, "categoryId" to newCategoryId)
@@ -159,7 +173,6 @@ class ListRepository @Inject constructor(
         awaitClose { listener.remove() }
     }
 
-    // AQUÍ ESTABA EL ERROR DE QUE NO SE VEÍAN LAS IMÁGENES NI PRECIOS
     fun getProductsFlow(listId: String): Flow<List<Product>> = callbackFlow {
         val listener = firestore.collection("lists").document(listId).collection("products")
             .addSnapshotListener { snapshot, error ->
@@ -172,9 +185,9 @@ class ListRepository @Inject constructor(
                             categoryId = doc.getString("categoryId") ?: "",
                             isCompleted = doc.getBoolean("isCompleted") ?: false,
                             tags = (doc.get("tags") as? List<String>) ?: emptyList(),
-                            ean = doc.getString("ean"), // <-- FALTABA
-                            price = doc.getDouble("price"), // <-- FALTABA
-                            imageUrl = doc.getString("imageUrl") // <-- FALTABA
+                            ean = doc.getString("ean"),
+                            price = doc.getDouble("price"),
+                            imageUrl = doc.getString("imageUrl")
                         )
                     }
                     trySend(products)

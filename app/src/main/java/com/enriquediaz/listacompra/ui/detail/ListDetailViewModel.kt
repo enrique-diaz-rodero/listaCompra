@@ -56,7 +56,6 @@ class ListDetailViewModel @Inject constructor(
     val searchResults: StateFlow<List<OffProduct>> = _searchResults
     private var searchJob: Job? = null
 
-    // FALTABA ESTO
     private val _isSearching = MutableStateFlow(false)
     val isSearching: StateFlow<Boolean> = _isSearching
 
@@ -77,7 +76,6 @@ class ListDetailViewModel @Inject constructor(
         }
     }
 
-    // FALTABA ESTO (Para el botón PlaylistAdd)
     fun createBaseCategories() {
         viewModelScope.launch {
             val baseCats = listOf(
@@ -163,6 +161,13 @@ class ListDetailViewModel @Inject constructor(
         viewModelScope.launch { listRepository.addCategory(listId, name) }
     }
 
+    // NUEVO: Eliminar categoría
+    fun deleteCategory(category: Category) {
+        viewModelScope.launch {
+            listRepository.deleteCategory(listId, category.id)
+        }
+    }
+
     fun addProduct(
         name: String, categoryId: String, ean: String? = null, price: Double? = null, imageUrl: String? = null
     ) {
@@ -172,7 +177,6 @@ class ListDetailViewModel @Inject constructor(
         }
     }
 
-    // FALTABA ESTO (Para el lápiz)
     fun updateProduct(productId: String, newName: String, newCategoryId: String) {
         viewModelScope.launch {
             listRepository.updateProduct(listId, productId, newName, newCategoryId)
