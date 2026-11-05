@@ -206,4 +206,53 @@ class ListRepository @Inject constructor(
             }
         awaitClose { listener.remove() }
     }
+    suspend fun updateProduct(listId: String, productId: String, newName: String, newCategoryId: String): Result<Unit> {
+        return try {
+            val updates = mapOf(
+                "name" to newName,
+                "categoryId" to newCategoryId
+            )
+            firestore.collection("lists").document(listId)
+                .collection("products").document(productId)
+                .update(updates)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error actualizando producto: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    // Eliminar una categoría moviendo sus productos a la categoría por defecto
+    suspend fun deleteCategory(listId: String, categoryIdToDelete: String, defaultCategoryId: String): Result<Unit> {
+        return try {
+            withContext(NonCancellable) {
+                val batch = firestore.batch()
+
+                // 1. Buscar todos los productos que pertenecen a la categoría a borrar
+                val productsSnapshot = firestore.collection("lists").document(listId)
+                    .collection("products")
+                    .whereEqualTo("categoryId", categoryIdToDelete)
+                    .get()
+                    .await()
+
+                // 2. Mover esos productos a la categoría por defecto
+                productsSnapshot.documents.forEach { doc ->
+                    batch.update(doc.reference, "categoryId", defaultCategoryId)
+                }
+
+                // 3. Borrar el documento de la categoría
+                val categoryRef = firestore.collection("lists").document(listId)
+                    .collection("categories").document(categoryIdToDelete)
+                batch.delete(categoryRef)
+
+                // Ejecutar todo de golpe
+                batch.commit().await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error borrando categoría: ${e.message}")
+            Result.failure(e)
+        }
+    }
 }

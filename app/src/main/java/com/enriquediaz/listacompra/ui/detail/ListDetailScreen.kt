@@ -1,5 +1,6 @@
 package com.enriquediaz.listacompra.ui.detail
 
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -8,11 +9,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Category // NUEVO: Icono para gestionar
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PlaylistAdd // NUEVO: Icono para crear
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.enriquediaz.listacompra.data.model.Product
 import com.enriquediaz.listacompra.utils.AutoCategorizer
 import kotlinx.coroutines.delay
 
@@ -42,6 +46,9 @@ fun ListDetailScreen(
     val currentUserId = viewModel.getCurrentUserId()
     var showMembersDialog by remember { mutableStateOf(false) }
 
+    // Estado para gestionar categorías
+    var showManageCategoriesDialog by remember { mutableStateOf(false) }
+
     var showCategoryDialog by remember { mutableStateOf(false) }
     var newCategoryName by remember { mutableStateOf("") }
 
@@ -50,7 +57,10 @@ fun ListDetailScreen(
     var selectedCategoryId by remember { mutableStateOf("") }
     var expandedDropdown by remember { mutableStateOf(false) }
 
-    // NUEVO: Estado para guardar el EAN seleccionado
+    // Estado para el producto que se está editando
+    var productToEdit by remember { mutableStateOf<Product?>(null) }
+
+    // Estado para guardar el EAN seleccionado
     var selectedEan by remember { mutableStateOf<String?>(null) }
 
     var showShareDialog by remember { mutableStateOf(false) }
@@ -67,11 +77,16 @@ fun ListDetailScreen(
                     }
                 },
                 actions = {
+                    // ICONO CAMBIADO: Gestionar Categorías
+                    IconButton(onClick = { showManageCategoriesDialog = true }) {
+                        Icon(Icons.Default.Folder, contentDescription = "Gestionar Categorías")
+                    }
                     IconButton(onClick = { showMembersDialog = true }) {
                         Icon(Icons.Default.Group, contentDescription = "Miembros de la lista")
                     }
+                    // ICONO CAMBIADO: Nueva Categoría (antes era List)
                     IconButton(onClick = { showCategoryDialog = true }) {
-                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Nueva Categoría")
+                        Icon(Icons.Default.PlaylistAdd, contentDescription = "Nueva Categoría")
                     }
                     IconButton(onClick = { showShareDialog = true }) {
                         Icon(Icons.Default.PersonAdd, contentDescription = "Compartir")
@@ -84,7 +99,9 @@ fun ListDetailScreen(
                 FloatingActionButton(onClick = {
                     showProductDialog = true
                     selectedCategoryId = categories.first().id
-                    selectedEan = null // Limpiamos el EAN al abrir
+                    selectedEan = null
+                    productToEdit = null
+                    newProductName = ""
                 }) {
                     Icon(Icons.Default.Add, contentDescription = "Añadir Producto")
                 }
@@ -134,15 +151,21 @@ fun ListDetailScreen(
                                     onCheckedChange = { viewModel.toggleProduct(product) }
                                 )
 
-                                // NUEVO: Columna para el nombre y el precio
-                                Column(modifier = Modifier.weight(1f)) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            productToEdit = product
+                                            newProductName = product.name
+                                            selectedCategoryId = product.categoryId
+                                        }
+                                ) {
                                     Text(
                                         text = product.name,
                                         style = MaterialTheme.typography.bodyLarge,
                                         textDecoration = if (product.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
                                         color = if (product.isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
                                     )
-                                    // Mostramos el precio si existe
                                     product.price?.let { price ->
                                         Text(
                                             text = "${String.format("%.2f", price)} €",
@@ -150,6 +173,18 @@ fun ListDetailScreen(
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                     }
+                                }
+
+                                IconButton(onClick = {
+                                    productToEdit = product
+                                    newProductName = product.name
+                                    selectedCategoryId = product.categoryId
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Editar",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 }
 
                                 IconButton(onClick = { viewModel.deleteProduct(product) }) {
@@ -166,6 +201,47 @@ fun ListDetailScreen(
                 }
             }
         }
+    }
+
+    // --- DIÁLOGO: GESTIONAR CATEGORÍAS ---
+    if (showManageCategoriesDialog) {
+        AlertDialog(
+            onDismissRequest = { showManageCategoriesDialog = false },
+            title = { Text("Gestionar Categorías") },
+            text = {
+                Column {
+                    if (categories.isEmpty()) {
+                        Text("No hay categorías.")
+                    } else {
+                        categories.forEach { category ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = category.name,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                // Ocultamos la papelera si es la categoría por defecto
+                                if (category.name != AutoCategorizer.DEFAULT_CATEGORY_NAME) {
+                                    IconButton(onClick = { viewModel.deleteCategory(category) }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Eliminar categoría",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showManageCategoriesDialog = false }) { Text("Cerrar") }
+            }
+        )
     }
 
     // --- DIÁLOGO: GESTIONAR MIEMBROS ---
@@ -236,17 +312,14 @@ fun ListDetailScreen(
         )
     }
 
-    // --- DIÁLOGO: NUEVO PRODUCTO (CON BUSCADOR Y PRECIOS) ---
-    if (showProductDialog) {
+    // --- DIÁLOGO: NUEVO/EDITAR PRODUCTO ---
+    if (showProductDialog || productToEdit != null) {
         val searchResults by viewModel.searchResults.collectAsState()
         val currentPrice by viewModel.currentPrice.collectAsState()
-        // Leemos las preferencias para saber si mostrar imágenes
         val prefs by viewModel.userPreferences.collectAsState(initial = null)
 
-        // DEBOUNCE: Esperar a que deje de escribir
         LaunchedEffect(newProductName) {
             if (newProductName.length > 2 && selectedEan == null) {
-                // Solo busca en la API si no hemos seleccionado ya un producto de la lista
                 delay(500)
                 viewModel.searchApi(newProductName)
             } else if (newProductName.length <= 2) {
@@ -257,22 +330,24 @@ fun ListDetailScreen(
         AlertDialog(
             onDismissRequest = {
                 showProductDialog = false
+                productToEdit = null
                 viewModel.clearSearchResults()
                 viewModel.clearPrice()
             },
-            title = { Text("Nuevo Producto") },
+            title = { Text(if (productToEdit != null) "Editar Producto" else "Nuevo Producto") },
             text = {
                 Column(modifier = Modifier.heightIn(max = 450.dp)) {
                     OutlinedTextField(
                         value = newProductName,
                         onValueChange = { nuevoTexto ->
                             newProductName = nuevoTexto
-                            selectedEan = null // Si escribe, pierde la selección previa
-                            viewModel.clearPrice() // Limpiamos el precio anterior
+                            selectedEan = null
+                            viewModel.clearPrice()
 
-                            // AUTO-CLASIFICACIÓN LOCAL
                             val categoriaSugerida = AutoCategorizer.sugerirCategoria(nuevoTexto)
-                            val categoriaReal = categories.find { it.name == categoriaSugerida }
+                            val categoriaReal = categories.find {
+                                AutoCategorizer.normalizarTexto(it.name) == AutoCategorizer.normalizarTexto(categoriaSugerida)
+                            }
                             if (categoriaReal != null) {
                                 selectedCategoryId = categoriaReal.id
                             }
@@ -284,7 +359,6 @@ fun ListDetailScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // LISTA DE SUGERENCIAS CON IMÁGENES
                     if (searchResults.isNotEmpty()) {
                         Text("Sugerencias:", style = MaterialTheme.typography.bodySmall)
                         LazyColumn {
@@ -294,21 +368,20 @@ fun ListDetailScreen(
                                         .fillMaxWidth()
                                         .clickable {
                                             newProductName = producto.name ?: ""
-                                            selectedEan = producto.code // Guardamos el EAN
+                                            selectedEan = producto.code
                                             viewModel.clearSearchResults()
 
-                                            // Re-evaluamos la categoría con el nombre seleccionado
                                             val catSug = AutoCategorizer.sugerirCategoria(newProductName)
-                                            val catReal = categories.find { it.name == catSug }
+                                            val catReal = categories.find {
+                                                AutoCategorizer.normalizarTexto(it.name) == AutoCategorizer.normalizarTexto(catSug)
+                                            }
                                             if (catReal != null) selectedCategoryId = catReal.id
 
-                                            // NUEVO: Buscar el precio
                                             viewModel.fetchPrice(producto.code)
                                         }
                                         .padding(vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Solo mostramos la imagen si el usuario lo tiene activado en preferencias
                                     if (prefs?.showImages == true && producto.imageUrl != null) {
                                         AsyncImage(
                                             model = producto.imageUrl,
@@ -328,7 +401,6 @@ fun ListDetailScreen(
                         }
                     }
 
-                    // NUEVO: Mostrar el precio si se ha encontrado
                     currentPrice?.let { precio ->
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
@@ -341,7 +413,6 @@ fun ListDetailScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // DESPLEGABLE DE CATEGORÍAS
                     Box {
                         OutlinedButton(
                             onClick = { expandedDropdown = true },
@@ -370,19 +441,24 @@ fun ListDetailScreen(
             confirmButton = {
                 TextButton(onClick = {
                     if (newProductName.isNotBlank() && selectedCategoryId.isNotBlank()) {
-                        // NUEVO: Pasamos el EAN y el precio al ViewModel
-                        viewModel.addProduct(newProductName, selectedCategoryId, selectedEan, currentPrice)
+                        if (productToEdit != null) {
+                            viewModel.updateProduct(productToEdit!!.id, newProductName, selectedCategoryId)
+                        } else {
+                            viewModel.addProduct(newProductName, selectedCategoryId, selectedEan, currentPrice)
+                        }
                         newProductName = ""
                         selectedEan = null
+                        productToEdit = null
                         showProductDialog = false
                         viewModel.clearSearchResults()
                         viewModel.clearPrice()
                     }
-                }) { Text("Añadir") }
+                }) { Text(if (productToEdit != null) "Guardar Cambios" else "Añadir") }
             },
             dismissButton = {
                 TextButton(onClick = {
                     showProductDialog = false
+                    productToEdit = null
                     viewModel.clearSearchResults()
                     viewModel.clearPrice()
                 }) { Text("Cancelar") }
