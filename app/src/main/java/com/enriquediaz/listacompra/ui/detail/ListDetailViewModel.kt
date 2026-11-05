@@ -155,6 +155,24 @@ class ListDetailViewModel @Inject constructor(
         }
     }
 
+    fun deleteCategory(categoryToDelete: Category) {
+        // Si intenta borrar la categoría por defecto, no hacemos nada
+        if (categoryToDelete.name == com.enriquediaz.listacompra.utils.AutoCategorizer.DEFAULT_CATEGORY_NAME) {
+            return
+        }
+
+        // Buscamos cuál es el ID de la categoría por defecto actual
+        val defaultCategory = categories.value.find {
+            it.name == com.enriquediaz.listacompra.utils.AutoCategorizer.DEFAULT_CATEGORY_NAME
+        }
+
+        viewModelScope.launch {
+            if (defaultCategory != null) {
+                listRepository.deleteCategory(listId, categoryToDelete.id, defaultCategory.id)
+            }
+        }
+    }
+
     // --- ACTUALIZADO: ahora acepta ean y price opcionales ---
     fun addProduct(
         name: String,
@@ -184,6 +202,12 @@ class ListDetailViewModel @Inject constructor(
     fun deleteProduct(product: Product) {
         viewModelScope.launch {
             listRepository.deleteProduct(listId, product.id)
+        }
+    }
+
+    fun updateProduct(productId: String, newName: String, newCategoryId: String) {
+        viewModelScope.launch {
+            listRepository.updateProduct(listId, productId, newName, newCategoryId)
         }
     }
 

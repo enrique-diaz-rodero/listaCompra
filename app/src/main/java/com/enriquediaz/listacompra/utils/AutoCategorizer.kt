@@ -1,8 +1,15 @@
 package com.enriquediaz.listacompra.utils
 
+import java.text.Normalizer
+
 object AutoCategorizer {
     // El nombre EXACTO de la categoría por defecto que pediste
     const val DEFAULT_CATEGORY_NAME = "Sin categoría (Crea una más ajustada)"
+
+    fun normalizarTexto(texto: String): String {
+        val normalized = Normalizer.normalize(texto, Normalizer.Form.NFD)
+        return normalized.replace("\\p{InCombiningDiacriticalMarks}+".toRegex(), "").lowercase().trim()
+    }
 
     // Diccionario de Alta Cobertura (99% de productos genéricos)
     private val dictionary = mapOf(
