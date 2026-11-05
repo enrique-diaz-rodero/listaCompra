@@ -23,34 +23,17 @@ class ListRepository @Inject constructor(
     private val firestore: FirebaseFirestore,
     private val auth: FirebaseAuth
 ) {
-    // ==========================================
-    // --- ACCIONES DE ESCRITURA (SUSPEND) ---
-    // ==========================================
-
     suspend fun createList(name: String): Result<Unit> {
         return try {
             val currentUserId = auth.currentUser?.uid ?: throw Exception("No hay usuario logueado")
-            val newList = ShoppingList(
-                name = name,
-                ownerId = currentUserId,
-                members = listOf(currentUserId)
-            )
-
-            // 1. Creamos la lista y obtenemos su referencia
+            val newList = ShoppingList(name = name, ownerId = currentUserId, members = listOf(currentUserId))
             val listRef = firestore.collection("lists").add(newList).await()
 
-            // 2. CREAMOS LA CATEGORÍA POR DEFECTO AUTOMÁTICAMENTE
             val defaultCategory = Category(name = com.enriquediaz.listacompra.utils.AutoCategorizer.DEFAULT_CATEGORY_NAME)
-            firestore.collection("lists")
-                .document(listRef.id)
-                .collection("categories")
-                .add(defaultCategory)
-                .await()
+            firestore.collection("lists").document(listRef.id).collection("categories").add(defaultCategory).await()
 
             Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        } catch (e: Exception) { Result.failure(e) }
     }
 
     suspend fun addCategory(listId: String, categoryName: String): Result<Unit> {
@@ -61,19 +44,44 @@ class ListRepository @Inject constructor(
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    // En ListRepository.kt, reemplaza tu función addProduct por esta:
-    suspend fun addProduct(listId: String, productName: String, categoryId: String, ean: String? = null, price: Double? = null): Result<Unit> {
+    // NUEVO: Borrar categoría
+    suspend fun deleteCategory(listId: String, categoryId: String): Result<Unit> {
+        return try {
+            withContext(NonCancellable) {
+                firestore.collection("lists").document(listId)
+                    .collection("categories").document(categoryId)
+                    .delete().await()
+            }
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error borrando categoría: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addProduct(
+        listId: String, productName: String, categoryId: String,
+        ean: String? = null, price: Double? = null, imageUrl: String? = null
+    ): Result<Unit> {
         return try {
             val newProduct = Product(
-                name = productName,
-                categoryId = categoryId,
-                isCompleted = false,
-                ean = ean,
-                price = price
+                name = productName, categoryId = categoryId, isCompleted = false,
+                ean = ean, price = price, imageUrl = imageUrl
             )
             firestore.collection("lists").document(listId).collection("products").add(newProduct).await()
             Result.success(Unit)
+        } catch (e: Exception) { Result.failure(e) }
+    }
+
+    suspend fun updateProduct(listId: String, productId: String, newName: String, newCategoryId: String): Result<Unit> {
+        return try {
+            val updates = mapOf("name" to newName, "categoryId" to newCategoryId)
+            firestore.collection("lists").document(listId)
+                .collection("products").document(productId)
+                .update(updates).await()
+            Result.success(Unit)
         } catch (e: Exception) {
+            Log.e("FirestoreDebug", "Error actualizando producto: ${e.message}")
             Result.failure(e)
         }
     }
@@ -133,10 +141,6 @@ class ListRepository @Inject constructor(
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    // ==========================================
-    // --- LECTURAS PUNTUALES (SUSPEND) ---
-    // ==========================================
-
     suspend fun getListById(listId: String): Result<ShoppingList> {
         return try {
             val doc = firestore.collection("lists").document(listId).get().await()
@@ -152,10 +156,6 @@ class ListRepository @Inject constructor(
             Result.success(user)
         } catch (e: Exception) { Result.failure(e) }
     }
-
-    // ==========================================
-    // --- LECTURAS EN TIEMPO REAL (FLOWS) ---
-    // ==========================================
 
     fun getUserListsFlow(): Flow<List<ShoppingList>> = callbackFlow {
         val currentUserId = auth.currentUser?.uid ?: run { close(Exception("No hay usuario")); return@callbackFlow }
@@ -184,7 +184,10 @@ class ListRepository @Inject constructor(
                             name = doc.getString("name") ?: "",
                             categoryId = doc.getString("categoryId") ?: "",
                             isCompleted = doc.getBoolean("isCompleted") ?: false,
-                            tags = (doc.get("tags") as? List<String>) ?: emptyList()
+                            tags = (doc.get("tags") as? List<String>) ?: emptyList(),
+                            ean = doc.getString("ean"),
+                            price = doc.getDouble("price"),
+                            imageUrl = doc.getString("imageUrl")
                         )
                     }
                     trySend(products)

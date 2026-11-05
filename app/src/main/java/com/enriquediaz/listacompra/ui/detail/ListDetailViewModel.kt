@@ -27,7 +27,7 @@ import javax.inject.Inject
 class ListDetailViewModel @Inject constructor(
     private val listRepository: ListRepository,
     private val productSearchRepository: ProductSearchRepository,
-    private val priceRepository: PriceRepository,               // <-- NUEVO
+    private val priceRepository: PriceRepository,
     private val preferencesRepository: UserPreferencesRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -52,12 +52,13 @@ class ListDetailViewModel @Inject constructor(
     private val _membersDetails = MutableStateFlow<List<User>>(emptyList())
     val membersDetails: StateFlow<List<User>> = _membersDetails
 
-    // --- ESTADOS PARA EL BUSCADOR DE LA API ---
     private val _searchResults = MutableStateFlow<List<OffProduct>>(emptyList())
     val searchResults: StateFlow<List<OffProduct>> = _searchResults
     private var searchJob: Job? = null
 
-    // --- NUEVO: ESTADO PARA EL PRECIO OBTENIDO ---
+    private val _isSearching = MutableStateFlow(false)
+    val isSearching: StateFlow<Boolean> = _isSearching
+
     private val _currentPrice = MutableStateFlow<Double?>(null)
     val currentPrice: StateFlow<Double?> = _currentPrice
 
@@ -75,23 +76,36 @@ class ListDetailViewModel @Inject constructor(
         }
     }
 
-    // --- BÚSQUEDA EN OPEN FOOD FACTS ---
+    fun createBaseCategories() {
+        viewModelScope.launch {
+            val baseCats = listOf(
+                "Lácteos y Huevos", "Carnicería", "Pescadería", "Panadería",
+                "Frutas y Verduras", "Despensa", "Bebidas", "Limpieza", "Higiene"
+            )
+            baseCats.forEach { name ->
+                if (_categories.value.none { it.name == name }) {
+                    listRepository.addCategory(listId, name)
+                }
+            }
+        }
+    }
+
     fun searchApi(query: String) {
         searchJob?.cancel()
-
         searchJob = viewModelScope.launch {
             if (query.length > 2) {
+                _isSearching.value = true
                 val prefs = preferencesRepository.userPreferencesFlow.first()
-                val supermarket = prefs.supermarket
-
-                val result = productSearchRepository.searchProducts(query, supermarket)
+                val result = productSearchRepository.searchProducts(query, prefs.supermarket)
                 if (result.isSuccess) {
                     _searchResults.value = result.getOrDefault(emptyList())
                 } else {
                     _searchResults.value = emptyList()
                 }
+                _isSearching.value = false
             } else {
                 _searchResults.value = emptyList()
+                _isSearching.value = false
             }
         }
     }
@@ -99,9 +113,9 @@ class ListDetailViewModel @Inject constructor(
     fun clearSearchResults() {
         _searchResults.value = emptyList()
         searchJob?.cancel()
+        _isSearching.value = false
     }
 
-    // --- NUEVO: OBTENER PRECIO POR EAN DESDE OPEN PRICES ---
     fun fetchPrice(ean: String?) {
         if (ean.isNullOrBlank()) {
             _currentPrice.value = null
@@ -122,16 +136,13 @@ class ListDetailViewModel @Inject constructor(
         _currentPrice.value = null
     }
 
-    // --- GESTIÓN DE MIEMBROS ---
     fun loadMembers() {
         viewModelScope.launch {
             listRepository.getListById(listId).onSuccess { list ->
                 _listDetails.value = list
                 val users = mutableListOf<User>()
                 list.members.forEach { uid ->
-                    listRepository.getUserDetails(uid).onSuccess { user ->
-                        users.add(user)
-                    }
+                    listRepository.getUserDetails(uid).onSuccess { user -> users.add(user) }
                 }
                 _membersDetails.value = users
             }
@@ -140,68 +151,29 @@ class ListDetailViewModel @Inject constructor(
 
     fun removeMember(memberUid: String) {
         viewModelScope.launch {
-            listRepository.removeMember(listId, memberUid).onSuccess {
-                loadMembers()
-            }
+            listRepository.removeMember(listId, memberUid).onSuccess { loadMembers() }
         }
     }
 
     fun getCurrentUserId(): String = currentUserId
 
-    // --- GESTIÓN DE CATEGORÍAS Y PRODUCTOS ---
     fun addCategory(name: String) {
+        viewModelScope.launch { listRepository.addCategory(listId, name) }
+    }
+
+    // NUEVO: Eliminar categoría
+    fun deleteCategory(category: Category) {
         viewModelScope.launch {
-            listRepository.addCategory(listId, name)
+            listRepository.deleteCategory(listId, category.id)
         }
     }
 
-    fun deleteCategory(categoryToDelete: Category) {
-        // Si intenta borrar la categoría por defecto, no hacemos nada
-        if (categoryToDelete.name == com.enriquediaz.listacompra.utils.AutoCategorizer.DEFAULT_CATEGORY_NAME) {
-            return
-        }
-
-        // Buscamos cuál es el ID de la categoría por defecto actual
-        val defaultCategory = categories.value.find {
-            it.name == com.enriquediaz.listacompra.utils.AutoCategorizer.DEFAULT_CATEGORY_NAME
-        }
-
-        viewModelScope.launch {
-            if (defaultCategory != null) {
-                listRepository.deleteCategory(listId, categoryToDelete.id, defaultCategory.id)
-            }
-        }
-    }
-
-    // --- ACTUALIZADO: ahora acepta ean y price opcionales ---
     fun addProduct(
-        name: String,
-        categoryId: String,
-        ean: String? = null,
-        price: Double? = null
+        name: String, categoryId: String, ean: String? = null, price: Double? = null, imageUrl: String? = null
     ) {
         viewModelScope.launch {
-            listRepository.addProduct(listId, name, categoryId, ean, price)
-            _currentPrice.value = null // Limpiamos el precio al añadir
-        }
-    }
-
-    fun toggleProduct(product: Product) {
-        val nuevoEstado = !product.isCompleted
-
-        // Optimistic UI
-        _products.value = _products.value.map {
-            if (it.id == product.id) it.copy(isCompleted = nuevoEstado) else it
-        }
-
-        viewModelScope.launch {
-            listRepository.toggleProductCompleted(listId, product.id, nuevoEstado)
-        }
-    }
-
-    fun deleteProduct(product: Product) {
-        viewModelScope.launch {
-            listRepository.deleteProduct(listId, product.id)
+            listRepository.addProduct(listId, name, categoryId, ean, price, imageUrl)
+            _currentPrice.value = null
         }
     }
 
@@ -211,7 +183,20 @@ class ListDetailViewModel @Inject constructor(
         }
     }
 
-    // --- COMPARTIR LISTA ---
+    fun toggleProduct(product: Product) {
+        val nuevoEstado = !product.isCompleted
+        _products.value = _products.value.map {
+            if (it.id == product.id) it.copy(isCompleted = nuevoEstado) else it
+        }
+        viewModelScope.launch {
+            listRepository.toggleProductCompleted(listId, product.id, nuevoEstado)
+        }
+    }
+
+    fun deleteProduct(product: Product) {
+        viewModelScope.launch { listRepository.deleteProduct(listId, product.id) }
+    }
+
     fun shareList(email: String) {
         viewModelScope.launch {
             val result = listRepository.shareListWithEmail(listId, email)

@@ -2,25 +2,29 @@ package com.enriquediaz.listacompra.ui.detail
 
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Category // NUEVO: Icono para gestionar
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.PlaylistAdd // NUEVO: Icono para crear
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -40,13 +44,11 @@ fun ListDetailScreen(
     val categories by viewModel.categories.collectAsState()
     val products by viewModel.products.collectAsState()
 
-    // Estados para miembros
     val members by viewModel.membersDetails.collectAsState()
     val listDetails by viewModel.listDetails.collectAsState()
     val currentUserId = viewModel.getCurrentUserId()
     var showMembersDialog by remember { mutableStateOf(false) }
 
-    // Estado para gestionar categorías
     var showManageCategoriesDialog by remember { mutableStateOf(false) }
 
     var showCategoryDialog by remember { mutableStateOf(false) }
@@ -57,11 +59,10 @@ fun ListDetailScreen(
     var selectedCategoryId by remember { mutableStateOf("") }
     var expandedDropdown by remember { mutableStateOf(false) }
 
-    // Estado para el producto que se está editando
     var productToEdit by remember { mutableStateOf<Product?>(null) }
 
-    // Estado para guardar el EAN seleccionado
     var selectedEan by remember { mutableStateOf<String?>(null) }
+    var selectedImageUrl by remember { mutableStateOf<String?>(null) } // FALTABA ESTO
 
     var showShareDialog by remember { mutableStateOf(false) }
     var emailToShare by remember { mutableStateOf("") }
@@ -77,12 +78,11 @@ fun ListDetailScreen(
                     }
                 },
                 actions = {
-                    // ICONO CAMBIADO: Gestionar Categorías
                     IconButton(onClick = { showManageCategoriesDialog = true }) {
                         Icon(Icons.Default.Folder, contentDescription = "Gestionar Categorías")
                     }
                     IconButton(onClick = { showMembersDialog = true }) {
-                        Icon(Icons.Default.Group, contentDescription = "Miembros de la lista")
+                        Icon(Icons.Default.Group, contentDescription = "Miembros")
                     }
                     // ICONO CAMBIADO: Nueva Categoría (antes era List)
                     IconButton(onClick = { showCategoryDialog = true }) {
@@ -100,6 +100,7 @@ fun ListDetailScreen(
                     showProductDialog = true
                     selectedCategoryId = categories.first().id
                     selectedEan = null
+                    selectedImageUrl = null // Limpiamos
                     productToEdit = null
                     newProductName = ""
                 }) {
@@ -122,7 +123,7 @@ fun ListDetailScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(bottom = 80.dp)
+                contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp)
             ) {
                 categories.forEach { category ->
                     val productsInCategory = products.filter { it.categoryId == category.id }
@@ -142,60 +143,84 @@ fun ListDetailScreen(
                             }
                         }
                         items(productsInCategory, key = { it.id }) { product ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            // DISEÑO EN TARJETA CON IMAGEN
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (product.isCompleted) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
-                                Checkbox(
-                                    checked = product.isCompleted,
-                                    onCheckedChange = { viewModel.toggleProduct(product) }
-                                )
-
-                                Column(
+                                Row(
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .clickable {
-                                            productToEdit = product
-                                            newProductName = product.name
-                                            selectedCategoryId = product.categoryId
-                                        }
+                                        .fillMaxWidth()
+                                        .padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = product.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        textDecoration = if (product.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-                                        color = if (product.isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
+                                    Checkbox(
+                                        checked = product.isCompleted,
+                                        onCheckedChange = { viewModel.toggleProduct(product) }
                                     )
-                                    product.price?.let { price ->
-                                        Text(
-                                            text = "${String.format("%.2f", price)} €",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary
+
+                                    // MOSTRAR IMAGEN
+                                    if (product.imageUrl != null) {
+                                        AsyncImage(
+                                            model = product.imageUrl,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .size(50.dp)
+                                                .clip(RoundedCornerShape(8.dp))
                                         )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                    }
+
+                                    // Texto Clickable
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                productToEdit = product
+                                                newProductName = product.name
+                                                selectedCategoryId = product.categoryId
+                                                showProductDialog = true // Aseguramos que se abra
+                                            }
+                                    ) {
+                                        Text(
+                                            text = product.name,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium,
+                                            textDecoration = if (product.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                            color = if (product.isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        product.price?.let { price ->
+                                            Text(
+                                                text = "${String.format("%.2f", price)} €",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+
+                                    // Icono de Editar explícito
+                                    IconButton(onClick = {
+                                        productToEdit = product
+                                        newProductName = product.name
+                                        selectedCategoryId = product.categoryId
+                                        showProductDialog = true // Aseguramos que se abra
+                                    }) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Editar", tint = MaterialTheme.colorScheme.primary)
+                                    }
+
+                                    // Icono de Eliminar
+                                    IconButton(onClick = { viewModel.deleteProduct(product) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
-
-                                IconButton(onClick = {
-                                    productToEdit = product
-                                    newProductName = product.name
-                                    selectedCategoryId = product.categoryId
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "Editar",
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-
-                                IconButton(onClick = { viewModel.deleteProduct(product) }) {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = "Eliminar producto",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
                             }
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                         }
                     }
                 }
@@ -203,7 +228,7 @@ fun ListDetailScreen(
         }
     }
 
-    // --- DIÁLOGO: GESTIONAR CATEGORÍAS ---
+    // --- DIÁLOGOS ---
     if (showManageCategoriesDialog) {
         AlertDialog(
             onDismissRequest = { showManageCategoriesDialog = false },
@@ -223,14 +248,9 @@ fun ListDetailScreen(
                                     text = category.name,
                                     modifier = Modifier.weight(1f)
                                 )
-                                // Ocultamos la papelera si es la categoría por defecto
                                 if (category.name != AutoCategorizer.DEFAULT_CATEGORY_NAME) {
                                     IconButton(onClick = { viewModel.deleteCategory(category) }) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Eliminar categoría",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar categoría", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
                             }
@@ -238,13 +258,10 @@ fun ListDetailScreen(
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showManageCategoriesDialog = false }) { Text("Cerrar") }
-            }
+            confirmButton = { TextButton(onClick = { showManageCategoriesDialog = false }) { Text("Cerrar") } }
         )
     }
 
-    // --- DIÁLOGO: GESTIONAR MIEMBROS ---
     if (showMembersDialog) {
         AlertDialog(
             onDismissRequest = { showMembersDialog = false },
@@ -266,11 +283,7 @@ fun ListDetailScreen(
                                 )
                                 if (member.uid != currentUserId && member.uid != listDetails?.ownerId) {
                                     IconButton(onClick = { viewModel.removeMember(member.uid) }) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "Eliminar miembro",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
+                                        Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error)
                                     }
                                 }
                             }
@@ -278,13 +291,10 @@ fun ListDetailScreen(
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showMembersDialog = false }) { Text("Cerrar") }
-            }
+            confirmButton = { TextButton(onClick = { showMembersDialog = false }) { Text("Cerrar") } }
         )
     }
 
-    // --- DIÁLOGO: NUEVA CATEGORÍA ---
     if (showCategoryDialog) {
         AlertDialog(
             onDismissRequest = { showCategoryDialog = false },
@@ -293,7 +303,7 @@ fun ListDetailScreen(
                 OutlinedTextField(
                     value = newCategoryName,
                     onValueChange = { newCategoryName = it },
-                    label = { Text("Nombre (Ej: Lácteos)") },
+                    label = { Text("Nombre") },
                     singleLine = true
                 )
             },
@@ -306,21 +316,19 @@ fun ListDetailScreen(
                     }
                 }) { Text("Crear") }
             },
-            dismissButton = {
-                TextButton(onClick = { showCategoryDialog = false }) { Text("Cancelar") }
-            }
+            dismissButton = { TextButton(onClick = { showCategoryDialog = false }) { Text("Cancelar") } }
         )
     }
 
-    // --- DIÁLOGO: NUEVO/EDITAR PRODUCTO ---
     if (showProductDialog || productToEdit != null) {
         val searchResults by viewModel.searchResults.collectAsState()
         val currentPrice by viewModel.currentPrice.collectAsState()
+        val isSearching by viewModel.isSearching.collectAsState()
         val prefs by viewModel.userPreferences.collectAsState(initial = null)
 
         LaunchedEffect(newProductName) {
-            if (newProductName.length > 2 && selectedEan == null) {
-                delay(500)
+            if (newProductName.length > 2 && selectedEan == null && productToEdit == null) {
+                delay(300)
                 viewModel.searchApi(newProductName)
             } else if (newProductName.length <= 2) {
                 viewModel.clearSearchResults()
@@ -342,6 +350,7 @@ fun ListDetailScreen(
                         onValueChange = { nuevoTexto ->
                             newProductName = nuevoTexto
                             selectedEan = null
+                            selectedImageUrl = null // Limpiamos imagen al escribir
                             viewModel.clearPrice()
 
                             val categoriaSugerida = AutoCategorizer.sugerirCategoria(nuevoTexto)
@@ -359,6 +368,12 @@ fun ListDetailScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    if (isSearching) {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        }
+                    }
+
                     if (searchResults.isNotEmpty()) {
                         Text("Sugerencias:", style = MaterialTheme.typography.bodySmall)
                         LazyColumn {
@@ -369,6 +384,7 @@ fun ListDetailScreen(
                                         .clickable {
                                             newProductName = producto.name ?: ""
                                             selectedEan = producto.code
+                                            selectedImageUrl = producto.imageUrl // Guardamos imagen
                                             viewModel.clearSearchResults()
 
                                             val catSug = AutoCategorizer.sugerirCategoria(newProductName)
@@ -386,14 +402,14 @@ fun ListDetailScreen(
                                         AsyncImage(
                                             model = producto.imageUrl,
                                             contentDescription = null,
-                                            modifier = Modifier.size(40.dp)
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp))
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                     } else {
-                                        Box(modifier = Modifier.size(40.dp).background(Color.LightGray))
+                                        Box(modifier = Modifier.size(40.dp).background(Color.LightGray, RoundedCornerShape(4.dp)))
                                         Spacer(modifier = Modifier.width(8.dp))
                                     }
-
                                     Text(text = producto.name ?: "Sin nombre", style = MaterialTheme.typography.bodyMedium)
                                 }
                                 HorizontalDivider()
@@ -444,16 +460,18 @@ fun ListDetailScreen(
                         if (productToEdit != null) {
                             viewModel.updateProduct(productToEdit!!.id, newProductName, selectedCategoryId)
                         } else {
-                            viewModel.addProduct(newProductName, selectedCategoryId, selectedEan, currentPrice)
+                            // PASAMOS LA IMAGEN
+                            viewModel.addProduct(newProductName, selectedCategoryId, selectedEan, currentPrice, selectedImageUrl)
                         }
                         newProductName = ""
                         selectedEan = null
+                        selectedImageUrl = null // Limpiamos
                         productToEdit = null
                         showProductDialog = false
                         viewModel.clearSearchResults()
                         viewModel.clearPrice()
                     }
-                }) { Text(if (productToEdit != null) "Guardar Cambios" else "Añadir") }
+                }) { Text(if (productToEdit != null) "Guardar" else "Añadir") }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -466,7 +484,6 @@ fun ListDetailScreen(
         )
     }
 
-    // --- DIÁLOGO: COMPARTIR LISTA ---
     if(showShareDialog) {
         AlertDialog(
             onDismissRequest = { showShareDialog = false },

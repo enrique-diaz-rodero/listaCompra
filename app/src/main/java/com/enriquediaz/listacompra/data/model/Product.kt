@@ -9,5 +9,6 @@ data class Product(
     val isCompleted: Boolean = false,
     val tags: List<String> = emptyList(),
     val ean: String? = null,   // <-- NUEVO: Código de barras
-    val price: Double? = null  // <-- NUEVO: Precio guardado
+    val price: Double? = null,  // <-- NUEVO: Precio guardado
+    val imageUrl: String? = null // <-- NUEVO: URL de la imagen
 )
