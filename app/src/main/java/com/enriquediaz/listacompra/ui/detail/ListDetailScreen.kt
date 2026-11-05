@@ -1,5 +1,6 @@
 package com.enriquediaz.listacompra.ui.detail
 
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.foundation.background
@@ -83,6 +84,7 @@ fun ListDetailScreen(
                     IconButton(onClick = { showMembersDialog = true }) {
                         Icon(Icons.Default.Group, contentDescription = "Miembros")
                     }
+                    // ICONO CAMBIADO: Nueva Categoría (antes era List)
                     IconButton(onClick = { showCategoryDialog = true }) {
                         Icon(Icons.Default.PlaylistAdd, contentDescription = "Nueva Categoría")
                     }
@@ -352,7 +354,9 @@ fun ListDetailScreen(
                             viewModel.clearPrice()
 
                             val categoriaSugerida = AutoCategorizer.sugerirCategoria(nuevoTexto)
-                            val categoriaReal = categories.find { it.name == categoriaSugerida }
+                            val categoriaReal = categories.find {
+                                AutoCategorizer.normalizarTexto(it.name) == AutoCategorizer.normalizarTexto(categoriaSugerida)
+                            }
                             if (categoriaReal != null) {
                                 selectedCategoryId = categoriaReal.id
                             }
@@ -384,7 +388,9 @@ fun ListDetailScreen(
                                             viewModel.clearSearchResults()
 
                                             val catSug = AutoCategorizer.sugerirCategoria(newProductName)
-                                            val catReal = categories.find { it.name == catSug }
+                                            val catReal = categories.find {
+                                                AutoCategorizer.normalizarTexto(it.name) == AutoCategorizer.normalizarTexto(catSug)
+                                            }
                                             if (catReal != null) selectedCategoryId = catReal.id
 
                                             viewModel.fetchPrice(producto.code)
