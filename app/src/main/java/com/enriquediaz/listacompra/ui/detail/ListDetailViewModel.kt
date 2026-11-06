@@ -1,5 +1,6 @@
 package com.enriquediaz.listacompra.ui.detail
 
+import android.os.Bundle
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -13,6 +14,8 @@ import com.enriquediaz.listacompra.data.repository.ListRepository
 import com.enriquediaz.listacompra.data.repository.PriceRepository
 import com.enriquediaz.listacompra.data.repository.ProductSearchRepository
 import com.enriquediaz.listacompra.data.repository.UserPreferencesRepository
+import com.enriquediaz.listacompra.utils.AutoCategorizer // <-- AÑADIDO PARA LA CATEGORÍA POR DEFECTO
+import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -29,6 +32,7 @@ class ListDetailViewModel @Inject constructor(
     private val productSearchRepository: ProductSearchRepository,
     private val priceRepository: PriceRepository,
     private val preferencesRepository: UserPreferencesRepository,
+    private val analytics: FirebaseAnalytics,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -73,20 +77,6 @@ class ListDetailViewModel @Inject constructor(
         }
         viewModelScope.launch {
             listRepository.getCategoriesFlow(listId).collectLatest { _categories.value = it }
-        }
-    }
-
-    fun createBaseCategories() {
-        viewModelScope.launch {
-            val baseCats = listOf(
-                "Lácteos y Huevos", "Carnicería", "Pescadería", "Panadería",
-                "Frutas y Verduras", "Despensa", "Bebidas", "Limpieza", "Higiene"
-            )
-            baseCats.forEach { name ->
-                if (_categories.value.none { it.name == name }) {
-                    listRepository.addCategory(listId, name)
-                }
-            }
         }
     }
 
@@ -161,10 +151,20 @@ class ListDetailViewModel @Inject constructor(
         viewModelScope.launch { listRepository.addCategory(listId, name) }
     }
 
-    // NUEVO: Eliminar categoría
+    // FUNCIÓN CORREGIDA
     fun deleteCategory(category: Category) {
         viewModelScope.launch {
-            listRepository.deleteCategory(listId, category.id)
+            // Buscamos el ID de la categoría por defecto para poder mover los productos allí
+            val defaultCategory = _categories.value.find {
+                it.name == AutoCategorizer.DEFAULT_CATEGORY_NAME
+            }
+
+            if (defaultCategory != null) {
+                // Ahora le pasamos los 3 parámetros requeridos
+                listRepository.deleteCategory(listId, category.id, defaultCategory.id)
+            } else {
+                Log.e("ListDetailVM", "Error: No se encontró la categoría por defecto para mover los productos.")
+            }
         }
     }
 
@@ -173,6 +173,14 @@ class ListDetailViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             listRepository.addProduct(listId, name, categoryId, ean, price, imageUrl)
+
+            // Registro de evento en Analytics
+            analytics.logEvent("product_added", Bundle().apply {
+                putString("product_name", name)
+                putBoolean("has_price", price != null)
+                putBoolean("has_image", imageUrl != null)
+            })
+
             _currentPrice.value = null
         }
     }
@@ -180,6 +188,11 @@ class ListDetailViewModel @Inject constructor(
     fun updateProduct(productId: String, newName: String, newCategoryId: String) {
         viewModelScope.launch {
             listRepository.updateProduct(listId, productId, newName, newCategoryId)
+
+            // Registro de evento en Analytics
+            analytics.logEvent("product_updated", Bundle().apply {
+                putString("new_name", newName)
+            })
         }
     }
 
@@ -203,6 +216,12 @@ class ListDetailViewModel @Inject constructor(
             if (result.isSuccess) {
                 _shareResult.value = "Lista compartida con éxito"
                 loadMembers()
+
+                // Registro de evento en Analytics
+                analytics.logEvent("list_shared", Bundle().apply {
+                    putString("shared_with", email)
+                })
+
             } else {
                 _shareResult.value = result.exceptionOrNull()?.message ?: "Error"
             }

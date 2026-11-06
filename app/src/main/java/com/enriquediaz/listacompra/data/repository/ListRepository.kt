@@ -29,8 +29,37 @@ class ListRepository @Inject constructor(
             val newList = ShoppingList(name = name, ownerId = currentUserId, members = listOf(currentUserId))
             val listRef = firestore.collection("lists").add(newList).await()
 
-            val defaultCategory = Category(name = com.enriquediaz.listacompra.utils.AutoCategorizer.DEFAULT_CATEGORY_NAME)
-            firestore.collection("lists").document(listRef.id).collection("categories").add(defaultCategory).await()
+            // 1. Definimos la lista de categorías que queremos crear por defecto
+            val categoriasBase = listOf(
+                "Frutas y Verduras",
+                "Carnicería",
+                "Pescadería",
+                "Charcutería",
+                "Lácteos y Huevos",
+                "Panadería",
+                "Despensa",
+                "Congelados",
+                "Bebidas",
+                "Snacks y Aperitivos",
+                "Limpieza",
+                "Higiene",
+                "Bebés",
+                "Mascotas",
+                "Bazar y Hogar",
+                com.enriquediaz.listacompra.utils.AutoCategorizer.DEFAULT_CATEGORY_NAME
+            )
+
+            // 2. Usamos un "Batch" (lote) para guardarlas todas de golpe. Es mucho más rápido.
+            val batch = firestore.batch()
+
+            categoriasBase.forEach { nombreCategoria ->
+                val newCategoryRef = firestore.collection("lists").document(listRef.id).collection("categories").document()
+                batch.set(newCategoryRef, Category(name = nombreCategoria))
+            }
+
+            // 3. Ejecutamos el guardado
+            batch.commit().await()
+
 
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
@@ -42,21 +71,6 @@ class ListRepository @Inject constructor(
             firestore.collection("lists").document(listId).collection("categories").add(newCategory).await()
             Result.success(Unit)
         } catch (e: Exception) { Result.failure(e) }
-    }
-
-    // NUEVO: Borrar categoría
-    suspend fun deleteCategory(listId: String, categoryId: String): Result<Unit> {
-        return try {
-            withContext(NonCancellable) {
-                firestore.collection("lists").document(listId)
-                    .collection("categories").document(categoryId)
-                    .delete().await()
-            }
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("FirestoreDebug", "Error borrando categoría: ${e.message}")
-            Result.failure(e)
-        }
     }
 
     suspend fun addProduct(
@@ -73,6 +87,7 @@ class ListRepository @Inject constructor(
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    // MANTENEMOS ESTA (La de la línea 69)
     suspend fun updateProduct(listId: String, productId: String, newName: String, newCategoryId: String): Result<Unit> {
         return try {
             val updates = mapOf("name" to newName, "categoryId" to newCategoryId)
@@ -209,24 +224,8 @@ class ListRepository @Inject constructor(
             }
         awaitClose { listener.remove() }
     }
-    suspend fun updateProduct(listId: String, productId: String, newName: String, newCategoryId: String): Result<Unit> {
-        return try {
-            val updates = mapOf(
-                "name" to newName,
-                "categoryId" to newCategoryId
-            )
-            firestore.collection("lists").document(listId)
-                .collection("products").document(productId)
-                .update(updates)
-                .await()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Log.e("FirestoreDebug", "Error actualizando producto: ${e.message}")
-            Result.failure(e)
-        }
-    }
 
-    // Eliminar una categoría moviendo sus productos a la categoría por defecto
+    // MANTENEMOS ESTA (La de la línea 223, la inteligente)
     suspend fun deleteCategory(listId: String, categoryIdToDelete: String, defaultCategoryId: String): Result<Unit> {
         return try {
             withContext(NonCancellable) {
