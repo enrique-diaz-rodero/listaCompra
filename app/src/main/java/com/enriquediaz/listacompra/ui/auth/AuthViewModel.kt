@@ -1,9 +1,11 @@
 package com.enriquediaz.listacompra.ui.auth
 
+import android.os.Bundle
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.enriquediaz.listacompra.data.repository.AuthRepository
+import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -11,7 +13,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    private val analytics: FirebaseAnalytics // <-- INYECTADO
 ) : ViewModel() {
 
     fun loginAnonimo(onSuccess: () -> Unit) {
@@ -23,6 +26,10 @@ class AuthViewModel @Inject constructor(
                 if (currentUser != null) {
                     authRepository.saveUserToFirestore(currentUser)
                 }
+                // LOG DEL EVENTO
+                analytics.logEvent("login_anonymous", Bundle().apply {
+                    putString("method", "Anonymous")
+                })
                 onSuccess()
             } else {
                 Log.e("AuthViewModel", "Error en login anónimo: ${result.exceptionOrNull()?.message}")
@@ -39,6 +46,10 @@ class AuthViewModel @Inject constructor(
                 if (currentUser != null) {
                     authRepository.saveUserToFirestore(currentUser)
                 }
+                // LOG DEL EVENTO
+                analytics.logEvent("login_google", Bundle().apply {
+                    putString("method", "Google")
+                })
                 onSuccess()
             } else {
                 val mensajeError = result.exceptionOrNull()?.message ?: "Error desconocido en Google"

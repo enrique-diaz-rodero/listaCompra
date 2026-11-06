@@ -2,7 +2,6 @@ package com.enriquediaz.listacompra.ui.detail
 
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -34,6 +33,7 @@ import coil.compose.AsyncImage
 import com.enriquediaz.listacompra.data.model.Product
 import com.enriquediaz.listacompra.utils.AutoCategorizer
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -62,7 +62,7 @@ fun ListDetailScreen(
     var productToEdit by remember { mutableStateOf<Product?>(null) }
 
     var selectedEan by remember { mutableStateOf<String?>(null) }
-    var selectedImageUrl by remember { mutableStateOf<String?>(null) } // FALTABA ESTO
+    var selectedImageUrl by remember { mutableStateOf<String?>(null) }
 
     var showShareDialog by remember { mutableStateOf(false) }
     var emailToShare by remember { mutableStateOf("") }
@@ -71,23 +71,27 @@ fun ListDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Lista de la compra") },
+                title = { Text(text = listDetails?.name ?: "Cargando...") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
                 actions = {
+
+                    // Tu botón original para gestionar (eliminar) categorías
                     IconButton(onClick = { showManageCategoriesDialog = true }) {
                         Icon(Icons.Default.Folder, contentDescription = "Gestionar Categorías")
                     }
+                    // Tu botón original de Miembros
                     IconButton(onClick = { showMembersDialog = true }) {
                         Icon(Icons.Default.Group, contentDescription = "Miembros")
                     }
-                    // ICONO CAMBIADO: Nueva Categoría (antes era List)
+                    // Tu botón original de Nueva Categoría
                     IconButton(onClick = { showCategoryDialog = true }) {
-                        Icon(Icons.Default.PlaylistAdd, contentDescription = "Nueva Categoría")
+                        Icon(Icons.Default.PlaylistAdd, contentDescription = "Nueva Categoría Manual")
                     }
+                    // Tu botón original de Compartir
                     IconButton(onClick = { showShareDialog = true }) {
                         Icon(Icons.Default.PersonAdd, contentDescription = "Compartir")
                     }
@@ -100,7 +104,7 @@ fun ListDetailScreen(
                     showProductDialog = true
                     selectedCategoryId = categories.first().id
                     selectedEan = null
-                    selectedImageUrl = null // Limpiamos
+                    selectedImageUrl = null
                     productToEdit = null
                     newProductName = ""
                 }) {
@@ -143,7 +147,6 @@ fun ListDetailScreen(
                             }
                         }
                         items(productsInCategory, key = { it.id }) { product ->
-                            // DISEÑO EN TARJETA CON IMAGEN
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -164,7 +167,6 @@ fun ListDetailScreen(
                                         onCheckedChange = { viewModel.toggleProduct(product) }
                                     )
 
-                                    // MOSTRAR IMAGEN
                                     if (product.imageUrl != null) {
                                         AsyncImage(
                                             model = product.imageUrl,
@@ -177,7 +179,6 @@ fun ListDetailScreen(
                                         Spacer(modifier = Modifier.width(12.dp))
                                     }
 
-                                    // Texto Clickable
                                     Column(
                                         modifier = Modifier
                                             .weight(1f)
@@ -185,7 +186,7 @@ fun ListDetailScreen(
                                                 productToEdit = product
                                                 newProductName = product.name
                                                 selectedCategoryId = product.categoryId
-                                                showProductDialog = true // Aseguramos que se abra
+                                                showProductDialog = true
                                             }
                                     ) {
                                         Text(
@@ -205,17 +206,15 @@ fun ListDetailScreen(
                                         }
                                     }
 
-                                    // Icono de Editar explícito
                                     IconButton(onClick = {
                                         productToEdit = product
                                         newProductName = product.name
                                         selectedCategoryId = product.categoryId
-                                        showProductDialog = true // Aseguramos que se abra
+                                        showProductDialog = true
                                     }) {
                                         Icon(Icons.Default.Edit, contentDescription = "Editar", tint = MaterialTheme.colorScheme.primary)
                                     }
 
-                                    // Icono de Eliminar
                                     IconButton(onClick = { viewModel.deleteProduct(product) }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Eliminar", tint = MaterialTheme.colorScheme.error)
                                     }
@@ -228,7 +227,6 @@ fun ListDetailScreen(
         }
     }
 
-    // --- DIÁLOGOS ---
     if (showManageCategoriesDialog) {
         AlertDialog(
             onDismissRequest = { showManageCategoriesDialog = false },
@@ -328,7 +326,7 @@ fun ListDetailScreen(
 
         LaunchedEffect(newProductName) {
             if (newProductName.length > 2 && selectedEan == null && productToEdit == null) {
-                delay(300)
+                delay(3000.milliseconds)
                 viewModel.searchApi(newProductName)
             } else if (newProductName.length <= 2) {
                 viewModel.clearSearchResults()
@@ -350,7 +348,7 @@ fun ListDetailScreen(
                         onValueChange = { nuevoTexto ->
                             newProductName = nuevoTexto
                             selectedEan = null
-                            selectedImageUrl = null // Limpiamos imagen al escribir
+                            selectedImageUrl = null
                             viewModel.clearPrice()
 
                             val categoriaSugerida = AutoCategorizer.sugerirCategoria(nuevoTexto)
@@ -376,7 +374,9 @@ fun ListDetailScreen(
 
                     if (searchResults.isNotEmpty()) {
                         Text("Sugerencias:", style = MaterialTheme.typography.bodySmall)
-                        LazyColumn {
+                        LazyColumn (
+                            modifier = Modifier.heightIn(max = 250.dp) // <-- AÑADIDO: Límite para que haga scroll
+                        ) {
                             items(searchResults) { producto ->
                                 Row(
                                     modifier = Modifier
@@ -384,7 +384,7 @@ fun ListDetailScreen(
                                         .clickable {
                                             newProductName = producto.name ?: ""
                                             selectedEan = producto.code
-                                            selectedImageUrl = producto.imageUrl // Guardamos imagen
+                                            selectedImageUrl = producto.imageUrl
                                             viewModel.clearSearchResults()
 
                                             val catSug = AutoCategorizer.sugerirCategoria(newProductName)
@@ -460,12 +460,11 @@ fun ListDetailScreen(
                         if (productToEdit != null) {
                             viewModel.updateProduct(productToEdit!!.id, newProductName, selectedCategoryId)
                         } else {
-                            // PASAMOS LA IMAGEN
                             viewModel.addProduct(newProductName, selectedCategoryId, selectedEan, currentPrice, selectedImageUrl)
                         }
                         newProductName = ""
                         selectedEan = null
-                        selectedImageUrl = null // Limpiamos
+                        selectedImageUrl = null
                         productToEdit = null
                         showProductDialog = false
                         viewModel.clearSearchResults()

@@ -9,10 +9,15 @@ interface OpenFoodFactsApi {
     suspend fun searchProducts(
         @Query("search_terms") query: String,
         @Query("stores") store: String? = null, // Opcional
+        @Query("countries_tags") country: String, // <-- Filtro por país
+        @Query("lc") language: String,                 // <-- Filtro por idioma
         @Query("search_simple") searchSimple: Int = 1,
         @Query("action") action: String = "process",
         @Query("json") json: Int = 1,
-        @Query("page_size") pageSize: Int = 5
+        @Query("page_size") pageSize: Int = 30, // <-- Aumentar el tamaño de la página
+
+        // NUEVO: Filtramos para que solo devuelva estos 3 campos
+        @Query("fields") fields: String = "code,product_name,image_front_small_url"
     ): OffSearchResponse
 }
 
