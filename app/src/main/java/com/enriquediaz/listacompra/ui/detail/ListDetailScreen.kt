@@ -326,7 +326,7 @@ fun ListDetailScreen(
 
         LaunchedEffect(newProductName) {
             if (newProductName.length > 2 && selectedEan == null && productToEdit == null) {
-                delay(3000.milliseconds)
+                delay(500.milliseconds)
                 viewModel.searchApi(newProductName)
             } else if (newProductName.length <= 2) {
                 viewModel.clearSearchResults()

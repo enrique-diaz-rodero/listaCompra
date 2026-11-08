@@ -27,7 +27,7 @@ object NetworkModule {
     fun provideOffRetrofit(): Retrofit {
         // CREAMOS EL CLIENTE CON TIMEOUTS
         val client = OkHttpClient.Builder()
-            .connectTimeout(4, TimeUnit.SECONDS) // 5 seg para conectar
+            .connectTimeout(5, TimeUnit.SECONDS) // 5 seg para conectar
             .readTimeout(15, TimeUnit.SECONDS)   // 15 seg para leer la respuesta
             .build()
 
@@ -52,7 +52,7 @@ object NetworkModule {
         // TAMBIÉN PODEMOS APLICAR TIMEOUTS A LOS PRECIOS
         val client = OkHttpClient.Builder()
             .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
             .build()
 
         return Retrofit.Builder()
