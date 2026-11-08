@@ -1,9 +1,9 @@
 # 🛒 Lista Compra Colaborativa
 
 ![Kotlin](https://img.shields.io/badge/Kotlin-100%25-purple?style=flat-square&logo=kotlin)
-![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-Modern-green?style=flat-square&logo=android)
-![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Analytics-orange?style=flat-square&logo=firebase)
-![Open Food Facts](https://img.shields.io/badge/API-Open%20Food%20Facts-blue?style=flat-square)
+![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-Modern-green?style=flat-square&logo=android)
+![Firebase](https://img.shields.io/badge/Firebase-Auth_%7C_Firestore_%7C_Analytics-orange?style=flat-square&logo=firebase)
+![Open Food Facts](https://img.shields.io/badge/API-Open_Food_Facts-blue?style=flat-square)
 
 Una aplicación Android nativa y moderna para gestionar la lista de la compra de forma colaborativa. Diseñada para ser utilizada por múltiples usuarios en tiempo real, con integración de APIs externas para la búsqueda de productos, imágenes y precios.
 
