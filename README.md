@@ -7,8 +7,6 @@
 
 Una aplicación Android nativa y moderna para gestionar la lista de la compra de forma colaborativa. Diseñada para ser utilizada por múltiples usuarios en tiempo real, con integración de APIs externas para la búsqueda de productos, imágenes y precios.
 
-> **📱 Nota para la evaluación:** Para probar la aplicación sin necesidad de compilar el código, puedes descargar el archivo **APK adjunto en la entrega** e instalarlo directamente en cualquier dispositivo Android.
-
 ## ✨ Características Principales
 
 *   **Autenticación Segura:** Inicio de sesión con cuenta de Google o de forma anónima mediante Firebase Auth.
