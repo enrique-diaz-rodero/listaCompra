@@ -8,6 +8,35 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:1053111214079:android:dfcd559db1e7b32e0951ca",
+        "android_client_info": {
+          "package_name": "com.enriquediaz.lazycolumngatos"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1053111214079-tub2khuiltotgl0ap9ss3j6o5vpm4cu5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA9Q4o-6H8t0_GIMYwm9CzCQhyheWqtE4Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1053111214079-tub2khuiltotgl0ap9ss3j6o5vpm4cu5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:1053111214079:android:0345ec8694216c3c0951ca",
         "android_client_info": {
           "package_name": "com.enriquediaz.listacompra"
@@ -28,6 +57,14 @@
           "android_info": {
             "package_name": "com.enriquediaz.listacompra",
             "certificate_hash": "7a267f401f54abc6a3e10ea5fc162096a7edc623"
+          }
+        },
+        {
+          "client_id": "1053111214079-u1ibj8ptlfk9f5fhigfkan8sqscddsv9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.enriquediaz.listacompra",
+            "certificate_hash": "ffa67442cacbfcec11a285eb4d5aedc4b9ecd5cc"
           }
         },
         {
